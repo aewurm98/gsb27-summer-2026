@@ -3,7 +3,6 @@
  * Run with: npx ts-node --esm scripts/seed.ts
  *
  * Requires env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- * Also requires NEXT_PUBLIC_MAPBOX_TOKEN for geocoding.
  */
 
 import * as xlsx from 'xlsx'
@@ -15,7 +14,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Missing SUPABASE env vars')
@@ -24,23 +22,47 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+interface GeoData {
+  lat: number
+  lng: number
+  country: string
+  state: string | null
+}
+
+// Known city coordinates — add new cities here as needed
+const CITY_GEO: Record<string, GeoData> = {
+  'Seattle':          { lat: 47.6062,  lng: -122.3321, country: 'United States', state: 'Washington' },
+  'Salt Lake City':   { lat: 40.7608,  lng: -111.8910, country: 'United States', state: 'Utah' },
+  'Phoenix':          { lat: 33.4484,  lng: -112.0740, country: 'United States', state: 'Arizona' },
+  'San Francisco':    { lat: 37.7749,  lng: -122.4194, country: 'United States', state: 'California' },
+  'Austin':           { lat: 30.2672,  lng: -97.7431,  country: 'United States', state: 'Texas' },
+  'Los Angeles':      { lat: 34.0522,  lng: -118.2437, country: 'United States', state: 'California' },
+  'New York':         { lat: 40.7128,  lng: -74.0060,  country: 'United States', state: 'New York' },
+  'Chicago':          { lat: 41.8781,  lng: -87.6298,  country: 'United States', state: 'Illinois' },
+  'Boston':           { lat: 42.3601,  lng: -71.0589,  country: 'United States', state: 'Massachusetts' },
+  'Denver':           { lat: 39.7392,  lng: -104.9903, country: 'United States', state: 'Colorado' },
+  'Miami':            { lat: 25.7617,  lng: -80.1918,  country: 'United States', state: 'Florida' },
+  'Washington DC':    { lat: 38.9072,  lng: -77.0369,  country: 'United States', state: 'DC' },
+  'Washington, DC':   { lat: 38.9072,  lng: -77.0369,  country: 'United States', state: 'DC' },
+  'Portland':         { lat: 45.5231,  lng: -122.6765, country: 'United States', state: 'Oregon' },
+  'Atlanta':          { lat: 33.7490,  lng: -84.3880,  country: 'United States', state: 'Georgia' },
+  'Houston':          { lat: 29.7604,  lng: -95.3698,  country: 'United States', state: 'Texas' },
+  'Minneapolis':      { lat: 44.9778,  lng: -93.2650,  country: 'United States', state: 'Minnesota' },
+  'Nashville':        { lat: 36.1627,  lng: -86.7816,  country: 'United States', state: 'Tennessee' },
+  'San Diego':        { lat: 32.7157,  lng: -117.1611, country: 'United States', state: 'California' },
+  'Las Vegas':        { lat: 36.1699,  lng: -115.1398, country: 'United States', state: 'Nevada' },
+  'London':           { lat: 51.5074,  lng: -0.1278,   country: 'United Kingdom', state: null },
+  'Tokyo':            { lat: 35.6762,  lng: 139.6503,  country: 'Japan', state: null },
+  'Paris':            { lat: 48.8566,  lng: 2.3522,    country: 'France', state: null },
+  'Barcelona':        { lat: 41.3851,  lng: 2.1734,    country: 'Spain', state: null },
+  'Singapore':        { lat: 1.3521,   lng: 103.8198,  country: 'Singapore', state: null },
+  'Sydney':           { lat: -33.8688, lng: 151.2093,  country: 'Australia', state: null },
+  'Toronto':          { lat: 43.6532,  lng: -79.3832,  country: 'Canada', state: null },
+}
+
 interface ClassmateRow {
   name: string
   stops: Array<{ city: string; start_date: string | null; end_date: string | null }>
-}
-
-async function geocodeCity(city: string): Promise<{ lat: number; lng: number; country: string; state: string | null } | null> {
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(city)}.json?types=place,locality&limit=1&access_token=${MAPBOX_TOKEN}`
-  const res = await fetch(url)
-  const data = await res.json() as { features: Array<{ center: [number, number]; context: Array<{ id: string; text: string }> }> }
-  const feature = data.features?.[0]
-  if (!feature) return null
-
-  const context = feature.context ?? []
-  const country = context.find(c => c.id.startsWith('country'))?.text ?? 'United States'
-  const region = context.find(c => c.id.startsWith('region'))?.text ?? null
-
-  return { lat: feature.center[1], lng: feature.center[0], country, state: region }
 }
 
 function parseDate(val: unknown): string | null {
@@ -48,11 +70,16 @@ function parseDate(val: unknown): string | null {
   if (val instanceof Date) return val.toISOString().slice(0, 10)
   if (typeof val === 'string') return val.slice(0, 10)
   if (typeof val === 'number') {
-    // Excel serial date
     const d = xlsx.SSF.parse_date_code(val)
-    return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`
+    return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
   }
   return null
+}
+
+function lookupGeo(city: string): GeoData | null {
+  if (CITY_GEO[city]) return CITY_GEO[city]
+  const base = city.split(',')[0].trim()
+  return CITY_GEO[base] ?? null
 }
 
 async function main() {
@@ -61,8 +88,7 @@ async function main() {
   const ws = wb.Sheets['Classmate Details']
   const rows = xlsx.utils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][]
 
-  // Row 4 (index 4) is headers: Name | City | Start | End | City | Start | End | City | Start | End
-  // Data starts at row 5 (index 5)
+  // Data starts at row index 5 (row 6 in Excel)
   const classmates: ClassmateRow[] = []
 
   for (let r = 5; r < rows.length; r++) {
@@ -71,7 +97,6 @@ async function main() {
     if (!name || typeof name !== 'string' || name.trim() === '') continue
 
     const stops: ClassmateRow['stops'] = []
-    // Stop 1: cols 2,3,4; Stop 2: cols 5,6,7; Stop 3: cols 8,9,10
     for (let s = 0; s < 3; s++) {
       const baseCol = 2 + s * 3
       const city = row[baseCol]
@@ -86,61 +111,58 @@ async function main() {
     classmates.push({ name: name.trim(), stops })
   }
 
-  console.log(`Found ${classmates.length} classmates`)
+  console.log(`Total classmates: ${classmates.length}`)
+  classmates.forEach((cm, i) => {
+    const summary = cm.stops.map(s => `${s.city} (${s.start_date ?? 'nan'} → ${s.end_date ?? 'nan'})`).join(' | ')
+    console.log(`  ${i + 1}. ${cm.name}: ${summary || '(no stops)'}`)
+  })
+  console.log()
 
   for (const cm of classmates) {
-    console.log(`\nProcessing: ${cm.name}`)
+    console.log(`Processing: ${cm.name}`)
 
-    // Create a fake user email (they'll claim their profile by signing in)
-    const fakeEmail = `${cm.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@stanford.edu`
-
-    // Upsert profile (by full_name since no user_id yet — admin pre-seeded)
-    // We use a special admin seed approach: create auth user first, then profile
-    // For simplicity, we insert profiles without user_id (NULL) for pre-seeded data
-    // When classmates sign in, they claim their profile via email match
-
-    const { data: existingProfile } = await supabase
+    const { data: existing } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, user_id')
       .eq('full_name', cm.name)
-      .single()
+      .maybeSingle()
 
     let profileId: string
 
-    if (existingProfile) {
-      profileId = existingProfile.id
-      console.log(`  → Existing profile ${profileId}`)
-    } else {
-      // We need to insert without user_id — modify schema to allow NULL user_id for seeded profiles
-      const { data: newProfile, error } = await supabase
+    if (existing) {
+      profileId = existing.id
+      await supabase
         .from('profiles')
-        .insert({ full_name: cm.name, is_admin: false })
+        .update({ has_completed_profile: true })
+        .eq('id', profileId)
+      console.log(`  → Updated existing profile ${profileId}${existing.user_id ? ' (claimed)' : ' (unclaimed)'}`)
+    } else {
+      const { data: created, error } = await supabase
+        .from('profiles')
+        .insert({ full_name: cm.name, has_completed_profile: true, is_admin: false })
         .select('id')
         .single()
 
-      if (error || !newProfile) {
+      if (error || !created) {
         console.error(`  ✗ Failed to create profile: ${error?.message}`)
         continue
       }
-      profileId = newProfile.id
+      profileId = created.id
       console.log(`  → Created profile ${profileId}`)
     }
 
-    // Delete old locations
     await supabase.from('locations').delete().eq('profile_id', profileId)
 
-    // Geocode and insert locations
     for (let i = 0; i < cm.stops.length; i++) {
       const stop = cm.stops[i]
-      console.log(`  → Geocoding: ${stop.city}`)
+      const geo = lookupGeo(stop.city)
 
-      const geo = await geocodeCity(stop.city)
       if (!geo) {
-        console.warn(`    ✗ Could not geocode "${stop.city}"`)
+        console.warn(`  ✗ No geo data for "${stop.city}" — add to CITY_GEO in scripts/seed.ts`)
         continue
       }
 
-      await supabase.from('locations').insert({
+      const { error } = await supabase.from('locations').insert({
         profile_id: profileId,
         city: stop.city,
         city_ascii: stop.city,
@@ -153,14 +175,17 @@ async function main() {
         sort_order: i,
       })
 
-      console.log(`    ✓ ${stop.city} (${geo.lat}, ${geo.lng}) ${stop.start_date} – ${stop.end_date}`)
-
-      // Rate limit
-      await new Promise(r => setTimeout(r, 200))
+      if (error) {
+        console.error(`  ✗ Location error: ${error.message}`)
+      } else {
+        console.log(`  ✓ ${stop.city} ${stop.start_date ?? '?'} – ${stop.end_date ?? '?'}`)
+      }
     }
   }
 
   console.log('\n✅ Seed complete!')
+  console.log('\nNext: go to Admin → Profiles tab to add email addresses for each classmate.')
+  console.log('When they sign in with that email, their profile will be auto-claimed.')
 }
 
 main().catch(console.error)

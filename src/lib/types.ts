@@ -1,6 +1,7 @@
 export interface Profile {
   id: string
-  user_id: string
+  user_id: string | null
+  email: string | null
   full_name: string
   photo_url: string | null
   section: string | null

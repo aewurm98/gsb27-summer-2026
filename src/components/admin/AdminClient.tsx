@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Profile, Location, TravelInterest, Trek, TrekInterest } from '@/lib/types'
 import { formatDateRange } from '@/lib/utils'
-import { Download, Users, MapPin, Compass, Search, TrendingUp } from 'lucide-react'
+import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus } from 'lucide-react'
 import Link from 'next/link'
 import Papa from 'papaparse'
+import { createClient } from '@/lib/supabase/client'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
 type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name'> | undefined })[] }
@@ -16,8 +18,55 @@ interface Props {
 }
 
 export function AdminClient({ profiles, treks }: Props) {
-  const [tab, setTab] = useState<'classmates' | 'treks' | 'insights'>('classmates')
+  const [tab, setTab] = useState<'classmates' | 'treks' | 'insights' | 'profiles'>('classmates')
   const [search, setSearch] = useState('')
+  const router = useRouter()
+  const supabase = createClient()
+
+  // Profiles tab state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editEmail, setEditEmail] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [addingNew, setAddingNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+
+  async function saveEmail(profileId: string) {
+    setSaving(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ email: editEmail.trim() || null })
+      .eq('id', profileId)
+    setSaving(false)
+    if (error) {
+      alert(`Error saving: ${error.message}`)
+      return
+    }
+    setEditingId(null)
+    router.refresh()
+  }
+
+  async function createProfile() {
+    if (!newName.trim()) return
+    setSaving(true)
+    const { error } = await supabase
+      .from('profiles')
+      .insert({
+        full_name: newName.trim(),
+        email: newEmail.trim() || null,
+        has_completed_profile: false,
+        is_admin: false,
+      })
+    setSaving(false)
+    if (error) {
+      alert(`Error creating: ${error.message}`)
+      return
+    }
+    setNewName('')
+    setNewEmail('')
+    setAddingNew(false)
+    router.refresh()
+  }
 
   function exportCSV() {
     const rows = profiles.flatMap(p =>
@@ -92,6 +141,8 @@ export function AdminClient({ profiles, treks }: Props) {
       .sort((a, b) => b.classmates.length - a.classmates.length)
   }, [profiles])
 
+  const sortedProfiles = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name))
+
   return (
     <div className="space-y-6">
       {/* Stats */}
@@ -121,7 +172,7 @@ export function AdminClient({ profiles, treks }: Props) {
       {/* Tabs + export */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 rounded-xl border border-border bg-card p-1">
-          {(['classmates', 'treks', 'insights'] as const).map(t => (
+          {(['classmates', 'profiles', 'treks', 'insights'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -209,6 +260,150 @@ export function AdminClient({ profiles, treks }: Props) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {tab === 'profiles' && (
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            Set an email on any unclaimed profile — when that person signs in with that email, the profile is automatically linked to their account.
+          </div>
+
+          <div className="rounded-2xl border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  {['Name', 'Email', 'Status', 'Locations'].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {sortedProfiles.map(p => (
+                  <tr key={p.id} className="hover:bg-accent/50 transition-colors">
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/profile/${p.id}`} className="hover:text-primary transition-colors">
+                        {p.full_name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      {editingId === p.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            autoFocus
+                            value={editEmail}
+                            onChange={e => setEditEmail(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveEmail(p.id)
+                              if (e.key === 'Escape') setEditingId(null)
+                            }}
+                            placeholder="email@domain.com"
+                            className="flex-1 px-2 py-1 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          />
+                          <button
+                            onClick={() => saveEmail(p.id)}
+                            disabled={saving}
+                            className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="p-1 rounded text-muted-foreground hover:bg-accent transition"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 group">
+                          <span className={p.email ? 'text-foreground' : 'text-muted-foreground italic'}>
+                            {p.email ?? 'not set'}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setEditingId(p.id)
+                              setEditEmail(p.email ?? '')
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:bg-accent transition"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.user_id ? (
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                          Claimed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                          Pre-seeded
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                      {p.locations?.length ?? 0}
+                    </td>
+                  </tr>
+                ))}
+
+                {/* Add new profile row */}
+                {addingNew && (
+                  <tr className="bg-accent/30">
+                    <td className="px-4 py-3">
+                      <input
+                        autoFocus
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        placeholder="Full name"
+                        className="w-full px-2 py-1 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        value={newEmail}
+                        onChange={e => setNewEmail(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') createProfile()
+                          if (e.key === 'Escape') setAddingNew(false)
+                        }}
+                        placeholder="email@domain.com (optional)"
+                        className="w-full px-2 py-1 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">Pre-seeded</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={createProfile}
+                          disabled={saving || !newName.trim()}
+                          className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition disabled:opacity-40"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          onClick={() => { setAddingNew(false); setNewName(''); setNewEmail('') }}
+                          className="p-1 rounded text-muted-foreground hover:bg-accent transition"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {!addingNew && (
+            <button
+              onClick={() => setAddingNew(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition"
+            >
+              <Plus size={14} /> Add pre-seeded profile
+            </button>
+          )}
         </div>
       )}
 
