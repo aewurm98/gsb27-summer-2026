@@ -23,17 +23,23 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith('/login') || pathname.startsWith('/auth')) {
+  // Let the auth callback through always
+  if (pathname.startsWith('/auth')) {
     return supabaseResponse
   }
 
-  if (!user) {
+  // Authenticated users don't need to see /login — send them into the app
+  if (user && pathname.startsWith('/login')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/map'
+    return NextResponse.redirect(url)
+  }
+
+  // Unauthenticated users can only access /login
+  if (!user && !pathname.startsWith('/login')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
