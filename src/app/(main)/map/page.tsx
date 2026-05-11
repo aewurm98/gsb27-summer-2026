@@ -6,7 +6,7 @@ export default async function MapPage() {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, full_name, photo_url, pre_mba_company, pre_mba_role, locations(*)')
+    .select('id, full_name, photo_url, locations(*)')
     .order('full_name')
 
   return (

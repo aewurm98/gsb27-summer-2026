@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic'
 import type { Profile, Location } from '@/lib/types'
 
-type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url' | 'pre_mba_company' | 'pre_mba_role'> & {
+type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url'> & {
   locations: Location[]
 }
 

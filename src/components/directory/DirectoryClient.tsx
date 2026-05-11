@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Fuse from 'fuse.js'
 import { Profile, Location, TravelInterest } from '@/lib/types'
 import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek } from '@/lib/utils'
-import { Search, MapPin, Briefcase, SlidersHorizontal, X } from 'lucide-react'
+import { Search, MapPin, SlidersHorizontal, X } from 'lucide-react'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
 
@@ -29,7 +29,7 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
   }, [profiles])
 
   const fuse = useMemo(() => new Fuse(profiles, {
-    keys: ['full_name', 'pre_mba_company', 'pre_mba_role', 'section'],
+    keys: ['full_name', 'section', 'additional_details'],
     threshold: 0.35,
   }), [profiles])
 
@@ -139,12 +139,21 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
                     {profile.full_name}
                     {profile.id === myProfileId && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(you)</span>}
                   </p>
-                  {(profile.pre_mba_role || profile.pre_mba_company) && (
-                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5">
-                      <Briefcase size={10} />
-                      {[profile.pre_mba_role, profile.pre_mba_company].filter(Boolean).join(' @ ')}
-                    </p>
+                  {profile.section && (
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{profile.section}</p>
                   )}
+                  <div className="flex gap-1 mt-1">
+                    {profile.can_host && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        🏠 Host
+                      </span>
+                    )}
+                    {profile.open_to_visit && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                        ✈️ Visitor
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -157,13 +166,14 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
                       <span className="truncate">
                         {loc.city}
                         {loc.country !== 'United States' ? `, ${loc.country}` : ''}
+                        {loc.label ? ` · ${loc.label}` : ''}
                         {' · '}
                         {formatDateRange(loc.start_date, loc.end_date)}
                       </span>
                     </div>
                   ))}
                   {!weekFilter && locations.length > 2 && (
-                    <p className="text-xs text-muted-foreground pl-4">+{locations.length - 2} more stops</p>
+                    <p className="text-xs text-muted-foreground pl-4">+{locations.length - 2} more</p>
                   )}
                 </div>
               ) : (

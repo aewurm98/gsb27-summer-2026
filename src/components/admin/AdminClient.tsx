@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Profile, Location, TravelInterest, Trek, TrekInterest } from '@/lib/types'
 import { formatDateRange } from '@/lib/utils'
-import { Download, Users, MapPin, Compass, Search } from 'lucide-react'
+import { Download, Users, MapPin, Compass, Search, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import Papa from 'papaparse'
 
@@ -16,7 +16,7 @@ interface Props {
 }
 
 export function AdminClient({ profiles, treks }: Props) {
-  const [tab, setTab] = useState<'classmates' | 'treks'>('classmates')
+  const [tab, setTab] = useState<'classmates' | 'treks' | 'insights'>('classmates')
   const [search, setSearch] = useState('')
 
   function exportCSV() {
@@ -25,10 +25,13 @@ export function AdminClient({ profiles, treks }: Props) {
         ? p.locations.map((loc, i) => ({
             name: p.full_name,
             section: p.section ?? '',
-            pre_mba_company: p.pre_mba_company ?? '',
-            pre_mba_role: p.pre_mba_role ?? '',
-            linkedin_url: p.linkedin_url ?? '',
-            stop_order: String(i + 1),
+            can_host: p.can_host ? 'yes' : 'no',
+            hosting_details: p.hosting_details ?? '',
+            open_to_visit: p.open_to_visit ? 'yes' : 'no',
+            experience_order: String(i + 1),
+            experience_label: loc.label ?? '',
+            company: loc.company ?? '',
+            role: loc.role ?? '',
             city: loc.city,
             state: loc.state ?? '',
             country: loc.country,
@@ -41,10 +44,13 @@ export function AdminClient({ profiles, treks }: Props) {
         : [{
             name: p.full_name,
             section: p.section ?? '',
-            pre_mba_company: p.pre_mba_company ?? '',
-            pre_mba_role: p.pre_mba_role ?? '',
-            linkedin_url: p.linkedin_url ?? '',
-            stop_order: '',
+            can_host: p.can_host ? 'yes' : 'no',
+            hosting_details: p.hosting_details ?? '',
+            open_to_visit: p.open_to_visit ? 'yes' : 'no',
+            experience_order: '',
+            experience_label: '',
+            company: '',
+            role: '',
             city: '',
             state: '',
             country: '',
@@ -68,9 +74,23 @@ export function AdminClient({ profiles, treks }: Props) {
 
   const filteredProfiles = profiles.filter(p =>
     p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.pre_mba_company ?? '').toLowerCase().includes(search.toLowerCase()) ||
     (p.section ?? '').toLowerCase().includes(search.toLowerCase())
   )
+
+  const trekInsights = useMemo(() => {
+    const cityMap = new Map<string, { city: string; country: string; classmates: string[] }>()
+    profiles.forEach(p => {
+      p.travel_interests?.forEach(t => {
+        const key = `${t.destination_city}|${t.destination_country}`
+        if (!cityMap.has(key)) {
+          cityMap.set(key, { city: t.destination_city, country: t.destination_country, classmates: [] })
+        }
+        cityMap.get(key)!.classmates.push(p.full_name)
+      })
+    })
+    return Array.from(cityMap.values())
+      .sort((a, b) => b.classmates.length - a.classmates.length)
+  }, [profiles])
 
   return (
     <div className="space-y-6">
@@ -101,7 +121,7 @@ export function AdminClient({ profiles, treks }: Props) {
       {/* Tabs + export */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 rounded-xl border border-border bg-card p-1">
-          {(['classmates', 'treks'] as const).map(t => (
+          {(['classmates', 'treks', 'insights'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -137,7 +157,7 @@ export function AdminClient({ profiles, treks }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  {['Name', 'Section', 'Company', 'Locations', 'Interests'].map(h => (
+                  {['Name', 'Section', 'Hosting', 'Locations', 'Interests'].map(h => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -151,15 +171,21 @@ export function AdminClient({ profiles, treks }: Props) {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{p.section ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground truncate max-w-[140px]">
-                      {[p.pre_mba_role, p.pre_mba_company].filter(Boolean).join(' @ ') || '—'}
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                      {p.can_host ? '🏠 Host' : ''}
+                      {p.can_host && p.open_to_visit ? ' · ' : ''}
+                      {p.open_to_visit ? '✈️ Visitor' : ''}
+                      {!p.can_host && !p.open_to_visit ? '—' : ''}
                     </td>
                     <td className="px-4 py-3">
                       {p.locations?.length
                         ? <div className="space-y-0.5">
                             {p.locations.sort((a, b) => a.sort_order - b.sort_order).map(l => (
                               <div key={l.id} className="text-xs text-muted-foreground">
-                                {l.city} · {formatDateRange(l.start_date, l.end_date)}
+                                {l.city}
+                                {l.label ? ` (${l.label})` : ''}
+                                {' · '}
+                                {formatDateRange(l.start_date, l.end_date)}
                               </div>
                             ))}
                           </div>
@@ -221,6 +247,63 @@ export function AdminClient({ profiles, treks }: Props) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {tab === 'insights' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <TrendingUp size={14} />
+            <span>Top destinations by classmate interest — potential trek candidates</span>
+          </div>
+          {trekInsights.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">
+              No travel interests submitted yet.
+            </p>
+          ) : (
+            <div className="rounded-2xl border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    {['Destination', 'Classmates interested', 'Who'].map(h => (
+                      <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {trekInsights.map(insight => (
+                    <tr key={`${insight.city}|${insight.country}`} className="hover:bg-accent/50 transition-colors">
+                      <td className="px-4 py-3 font-medium">
+                        {insight.city}
+                        {insight.country !== 'United States' ? `, ${insight.country}` : ''}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="h-2 rounded-full bg-primary"
+                            style={{ width: `${Math.min(100, insight.classmates.length * 10)}px` }}
+                          />
+                          <span className="text-muted-foreground">{insight.classmates.length}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {insight.classmates.slice(0, 5).map(name => (
+                            <span key={name} className="text-xs px-1.5 py-0.5 rounded-full bg-accent">
+                              {name.split(' ')[0]}
+                            </span>
+                          ))}
+                          {insight.classmates.length > 5 && (
+                            <span className="text-xs text-muted-foreground">+{insight.classmates.length - 5} more</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -23,9 +23,10 @@ function StanfordTree({ className }: { className?: string }) {
 }
 
 const NAV_LINKS = [
-  { href: '/map',       label: 'Map',       icon: Map   },
-  { href: '/directory', label: 'Directory', icon: Users },
-  { href: '/treks',     label: 'Treks',     icon: Plane },
+  { href: '/map',          label: 'Map',       icon: Map   },
+  { href: '/directory',    label: 'Directory', icon: Users },
+  { href: '/treks',        label: 'Treks',     icon: Plane },
+  { href: '/profile/edit', label: 'Profile',   icon: User  },
 ]
 
 export function Navbar({ profile }: { profile: Profile | null }) {
@@ -44,7 +45,7 @@ export function Navbar({ profile }: { profile: Profile | null }) {
     router.push('/login')
   }
 
-  const initials = profile?.full_name?.split(' ').slice(0, 2).map(n => n[0]).join('') ?? '?'
+  const initials = profile?.full_name?.split(' ').slice(0, 2).map(n => n[0]).join('') ?? null
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
@@ -64,7 +65,7 @@ export function Navbar({ profile }: { profile: Profile | null }) {
               href={href}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                pathname.startsWith(href)
+                (href === '/profile/edit' ? pathname === href || pathname.startsWith('/profile/edit') : pathname.startsWith(href))
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               )}
@@ -105,7 +106,7 @@ export function Navbar({ profile }: { profile: Profile | null }) {
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors"
             >
               <div className="w-7 h-7 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-xs font-bold">
-                {initials}
+                {initials ?? <User size={14} />}
               </div>
             </button>
 
@@ -114,8 +115,8 @@ export function Navbar({ profile }: { profile: Profile | null }) {
                 <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-border bg-popover shadow-xl py-1 z-50">
                   <div className="px-3 py-2.5 border-b border-border mb-1">
-                    <p className="text-xs font-medium text-foreground truncate">{profile?.full_name ?? 'Loading…'}</p>
-                    <p className="text-xs text-muted-foreground truncate">{profile?.section ? `Section ${profile.section}` : 'GSB MBA27'}</p>
+                    <p className="text-xs font-medium text-foreground truncate">{profile?.full_name ?? 'New User'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{profile?.section ?? 'GSB MBA27'}</p>
                   </div>
                   <Link
                     href="/profile/edit"

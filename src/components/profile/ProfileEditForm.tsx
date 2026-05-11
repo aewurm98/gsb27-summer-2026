@@ -5,9 +5,11 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { CityAutocomplete } from './CityAutocomplete'
 import { Profile, Location, TravelInterest } from '@/lib/types'
-import { getOverlappingClassmates, formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { Plus, Trash2, GripVertical, Save, Users, Loader2, Upload } from 'lucide-react'
+import { getOverlappingClassmates, avatarColor, getInitials } from '@/lib/utils'
+import { Plus, Trash2, Save, Users, Loader2, Upload } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+
+const EXPERIENCE_LABELS = ['Summer Internship', 'Traveling', 'Visiting family/friends', 'Other'] as const
 
 interface LocationDraft {
   id?: string
@@ -20,6 +22,9 @@ interface LocationDraft {
   start_date: string
   end_date: string
   sort_order: number
+  label: string
+  company: string
+  role: string
 }
 
 interface InterestDraft {
@@ -29,12 +34,18 @@ interface InterestDraft {
   destination_lat: number | null
   destination_lng: number | null
   notes: string
+  interest_start_date: string
+  interest_end_date: string
 }
 
 type AllProfile = Pick<Profile, 'id' | 'full_name'> & { locations: Location[] }
 
 function newLocationDraft(order: number): LocationDraft {
-  return { city: '', city_ascii: null, state: null, country: 'United States', lat: null, lng: null, start_date: '', end_date: '', sort_order: order }
+  return {
+    city: '', city_ascii: null, state: null, country: 'United States',
+    lat: null, lng: null, start_date: '', end_date: '', sort_order: order,
+    label: 'Summer Internship', company: '', role: '',
+  }
 }
 
 export function ProfileEditForm({
@@ -48,13 +59,14 @@ export function ProfileEditForm({
 }) {
   const router = useRouter()
   const supabase = createClient()
+  const isNewUser = !profile?.has_completed_profile
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
-  const [bio, setBio] = useState(profile?.bio ?? '')
-  const [linkedinUrl, setLinkedinUrl] = useState(profile?.linkedin_url ?? '')
   const [section, setSection] = useState(profile?.section ?? '')
-  const [preMbaCompany, setPreMbaCompany] = useState(profile?.pre_mba_company ?? '')
-  const [preMbaRole, setPreMbaRole] = useState(profile?.pre_mba_role ?? '')
+  const [additionalDetails, setAdditionalDetails] = useState(profile?.additional_details ?? '')
+  const [canHost, setCanHost] = useState(profile?.can_host ?? false)
+  const [hostingDetails, setHostingDetails] = useState(profile?.hosting_details ?? '')
+  const [openToVisit, setOpenToVisit] = useState(profile?.open_to_visit ?? false)
   const [photoUrl, setPhotoUrl] = useState(profile?.photo_url ?? '')
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
@@ -62,7 +74,14 @@ export function ProfileEditForm({
     profile?.locations?.length
       ? profile.locations
           .sort((a, b) => a.sort_order - b.sort_order)
-          .map(l => ({ ...l, start_date: l.start_date ?? '', end_date: l.end_date ?? '' }))
+          .map(l => ({
+            ...l,
+            start_date: l.start_date ?? '',
+            end_date: l.end_date ?? '',
+            label: l.label ?? 'Summer Internship',
+            company: l.company ?? '',
+            role: l.role ?? '',
+          }))
       : [newLocationDraft(0)]
   )
 
@@ -74,6 +93,8 @@ export function ProfileEditForm({
       destination_lat: t.destination_lat,
       destination_lng: t.destination_lng,
       notes: t.notes ?? '',
+      interest_start_date: t.interest_start_date ?? '',
+      interest_end_date: t.interest_end_date ?? '',
     })) ?? []
   )
 
@@ -119,30 +140,38 @@ export function ProfileEditForm({
   }
 
   function addInterest() {
-    setInterests(prev => [...prev, { destination_city: '', destination_country: 'United States', destination_lat: null, destination_lng: null, notes: '' }])
+    setInterests(prev => [...prev, {
+      destination_city: '', destination_country: 'United States',
+      destination_lat: null, destination_lng: null,
+      notes: '', interest_start_date: '', interest_end_date: '',
+    }])
   }
 
   function removeInterest(index: number) {
     setInterests(prev => prev.filter((_, i) => i !== index))
   }
 
+  function updateInterest(index: number, patch: Partial<InterestDraft>) {
+    setInterests(prev => prev.map((int, i) => i === index ? { ...int, ...patch } : int))
+  }
+
   async function handleSave() {
     setSaving(true)
     setError(null)
     try {
-      // Upsert profile
       const { data: savedProfile, error: profileErr } = await supabase
         .from('profiles')
         .upsert({
           ...(profile?.id ? { id: profile.id } : {}),
           user_id: userId,
           full_name: fullName,
-          bio,
-          linkedin_url: linkedinUrl || null,
           section: section || null,
-          pre_mba_company: preMbaCompany || null,
-          pre_mba_role: preMbaRole || null,
+          additional_details: additionalDetails || null,
+          can_host: canHost,
+          hosting_details: canHost ? (hostingDetails || null) : null,
+          open_to_visit: openToVisit,
           photo_url: photoUrl || null,
+          has_completed_profile: true,
         })
         .select()
         .single()
@@ -151,7 +180,6 @@ export function ProfileEditForm({
 
       const profileId = savedProfile.id
 
-      // Replace locations
       await supabase.from('locations').delete().eq('profile_id', profileId)
       const validLocations = locations.filter(l => l.city && l.lat !== null)
       if (validLocations.length) {
@@ -167,12 +195,14 @@ export function ProfileEditForm({
             start_date: l.start_date || null,
             end_date: l.end_date || null,
             sort_order: i,
+            label: l.label || null,
+            company: l.company || null,
+            role: l.role || null,
           }))
         )
         if (locErr) throw locErr
       }
 
-      // Replace travel interests
       await supabase.from('travel_interests').delete().eq('profile_id', profileId)
       const validInterests = interests.filter(i => i.destination_city)
       if (validInterests.length) {
@@ -184,9 +214,16 @@ export function ProfileEditForm({
             destination_lat: i.destination_lat,
             destination_lng: i.destination_lng,
             notes: i.notes || null,
+            interest_start_date: i.interest_start_date || null,
+            interest_end_date: i.interest_end_date || null,
           }))
         )
         if (intErr) throw intErr
+      }
+
+      if (isNewUser) {
+        router.push('/map')
+        return
       }
 
       setSaved(true)
@@ -199,8 +236,21 @@ export function ProfileEditForm({
     }
   }
 
+  const showCompanyRole = (label: string) => label === 'Summer Internship' || label === 'Other'
+
   return (
     <div className="space-y-8">
+      {/* Welcome banner for new users */}
+      {isNewUser && (
+        <div className="rounded-2xl bg-primary/10 border border-primary/20 p-5 mb-2">
+          <h2 className="font-semibold text-primary mb-1">Welcome to GSB Summer &#39;26!</h2>
+          <p className="text-sm text-muted-foreground">
+            Fill out your summer plans below. Once you save, you&#39;ll be able to see
+            where all your classmates are headed this summer.
+          </p>
+        </div>
+      )}
+
       {/* Overlap banner */}
       {overlaps.length > 0 && (
         <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 flex gap-3">
@@ -217,11 +267,10 @@ export function ProfileEditForm({
         </div>
       )}
 
-      {/* Bio section */}
+      {/* About Me */}
       <section className="rounded-2xl border border-border bg-card p-6 space-y-4">
         <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">About me</h2>
 
-        {/* Photo upload */}
         <div className="flex items-center gap-4">
           <div className={`relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(fullName || 'A')}`}>
             {photoUrl
@@ -257,56 +306,56 @@ export function ProfileEditForm({
               placeholder="Section A"
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Pre-MBA company</label>
-            <input
-              value={preMbaCompany}
-              onChange={e => setPreMbaCompany(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Goldman Sachs"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Pre-MBA role</label>
-            <input
-              value={preMbaRole}
-              onChange={e => setPreMbaRole(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Analyst"
-            />
-          </div>
           <div className="space-y-1 sm:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">LinkedIn URL</label>
-            <input
-              value={linkedinUrl}
-              onChange={e => setLinkedinUrl(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="https://linkedin.com/in/your-name"
-            />
-          </div>
-          <div className="space-y-1 sm:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">Bio</label>
+            <label className="text-xs font-medium text-muted-foreground">Additional details</label>
             <textarea
-              value={bio}
-              onChange={e => setBio(e.target.value)}
+              value={additionalDetails}
+              onChange={e => setAdditionalDetails(e.target.value)}
               rows={3}
               className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              placeholder="Tell classmates a bit about yourself and what you're up to this summer…"
+              placeholder="Anything your classmates should know — where in the city you'll be, best way to reach you, fun plans, etc."
             />
           </div>
         </div>
       </section>
 
-      {/* Summer itinerary */}
+      {/* Hosting & Visiting */}
+      <section className="rounded-2xl border border-border bg-card p-6 space-y-4">
+        <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Hosting &amp; Visiting</h2>
+
+        <div className="space-y-2">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={canHost} onChange={e => setCanHost(e.target.checked)}
+              className="w-4 h-4 rounded accent-primary" />
+            <span className="text-sm font-medium">I can host visiting classmates</span>
+          </label>
+          {canHost && (
+            <input
+              value={hostingDetails}
+              onChange={e => setHostingDetails(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Guest bed, air mattress, couch — let them know what you've got"
+            />
+          )}
+        </div>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" checked={openToVisit} onChange={e => setOpenToVisit(e.target.checked)}
+            className="w-4 h-4 rounded accent-primary" />
+          <span className="text-sm font-medium">I&#39;m open to visiting / couch-surfing with classmates</span>
+        </label>
+      </section>
+
+      {/* Summer Plans */}
       <section className="rounded-2xl border border-border bg-card p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Summer itinerary</h2>
+          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Summer plans</h2>
           <button
             onClick={addLocation}
-            disabled={locations.length >= 5}
+            disabled={locations.length >= 10}
             className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-border hover:bg-accent transition disabled:opacity-40"
           >
-            <Plus size={12} /> Add stop
+            <Plus size={12} /> Add experience
           </button>
         </div>
 
@@ -314,9 +363,8 @@ export function ProfileEditForm({
           {locations.map((loc, i) => (
             <div key={i} className="rounded-xl border border-border bg-background p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <GripVertical size={12} />
-                  Stop {i + 1}
+                <span className="text-xs font-medium text-muted-foreground">
+                  {loc.label || `Experience ${i + 1}`}
                 </span>
                 {locations.length > 1 && (
                   <button
@@ -327,6 +375,42 @@ export function ProfileEditForm({
                   </button>
                 )}
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Type</label>
+                <select
+                  value={loc.label}
+                  onChange={e => updateLocation(i, { label: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {EXPERIENCE_LABELS.map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+
+              {showCompanyRole(loc.label) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Company (optional)</label>
+                    <input
+                      value={loc.company}
+                      onChange={e => updateLocation(i, { company: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="Acme Corp"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Role (optional)</label>
+                    <input
+                      value={loc.role}
+                      onChange={e => updateLocation(i, { role: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="Intern"
+                    />
+                  </div>
+                </div>
+              )}
 
               <CityAutocomplete
                 value={loc.city}
@@ -381,7 +465,7 @@ export function ProfileEditForm({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Travel interests</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Places you'd love to visit — we'll match you with classmates who agree.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Places you&#39;d love to visit — we&#39;ll match you with classmates who agree.</p>
           </div>
           <button
             onClick={addInterest}
@@ -393,7 +477,7 @@ export function ProfileEditForm({
 
         {interests.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No travel interests yet. Add destinations you'd love to explore with classmates.
+            No travel interests yet. Add destinations you&#39;d love to explore with classmates.
           </p>
         )}
 
@@ -408,27 +492,45 @@ export function ProfileEditForm({
               </div>
               <CityAutocomplete
                 value={interest.destination_city}
-                onChange={result => {
-                  setInterests(prev => prev.map((int, idx) =>
-                    idx === i
-                      ? { ...int, destination_city: result?.city ?? '', destination_country: result?.country ?? 'United States', destination_lat: result?.lat ?? null, destination_lng: result?.lng ?? null }
-                      : int
-                  ))
-                }}
+                onChange={result => updateInterest(i, {
+                  destination_city: result?.city ?? '',
+                  destination_country: result?.country ?? 'United States',
+                  destination_lat: result?.lat ?? null,
+                  destination_lng: result?.lng ?? null,
+                })}
                 placeholder="Search destination…"
               />
               <input
                 value={interest.notes}
-                onChange={e => setInterests(prev => prev.map((int, idx) => idx === i ? { ...int, notes: e.target.value } : int))}
+                onChange={e => updateInterest(i, { notes: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 placeholder="Notes (optional)"
               />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Interested from (optional)</label>
+                  <input
+                    type="date"
+                    value={interest.interest_start_date}
+                    onChange={e => updateInterest(i, { interest_start_date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">To (optional)</label>
+                  <input
+                    type="date"
+                    value={interest.interest_end_date}
+                    onChange={e => updateInterest(i, { interest_end_date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Save */}
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex justify-end">
@@ -438,7 +540,7 @@ export function ProfileEditForm({
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
         >
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-          {saved ? 'Saved!' : saving ? 'Saving…' : 'Save profile'}
+          {saved ? 'Saved!' : saving ? 'Saving…' : isNewUser ? 'Save & get started' : 'Save profile'}
         </button>
       </div>
     </div>

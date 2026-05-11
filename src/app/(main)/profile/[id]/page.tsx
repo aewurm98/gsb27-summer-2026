@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
 import Image from 'next/image'
-import { MapPin, Briefcase, ExternalLink, Globe } from 'lucide-react'
+import { MapPin, Globe, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,41 +32,52 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold">{profile.full_name}</h1>
-          {(profile.pre_mba_role || profile.pre_mba_company) && (
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
-              <Briefcase size={12} />
-              {[profile.pre_mba_role, profile.pre_mba_company].filter(Boolean).join(' @ ')}
-            </p>
-          )}
           {profile.section && (
-            <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+            <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
               {profile.section}
             </span>
           )}
-          <div className="flex gap-3 mt-3">
-            {profile.linkedin_url && (
-              <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition">
-                <ExternalLink size={13} /> LinkedIn
-              </a>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {profile.can_host && (
+              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <Home size={10} /> Available to host
+              </span>
+            )}
+            {profile.open_to_visit && (
+              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                <Plane size={10} /> Open to visit
+              </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Bio */}
-      {profile.bio && (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">About</h2>
-          <p className="text-sm leading-relaxed">{profile.bio}</p>
+      {/* Hosting details */}
+      {profile.can_host && profile.hosting_details && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 dark:border-emerald-800 p-5">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-2">Hosting</h2>
+          <p className="text-sm leading-relaxed">{profile.hosting_details}</p>
         </div>
       )}
 
-      {/* Itinerary */}
+      {/* Additional details */}
+      {profile.additional_details && (
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">About</h2>
+          <p className="text-sm leading-relaxed">{profile.additional_details}</p>
+        </div>
+      )}
+
+      {/* Summer plans */}
       {locations.length > 0 && (
         <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">Summer itinerary</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">Summer plans</h2>
           <div className="space-y-0">
-            {locations.map((loc: { id: string; city: string; state: string | null; country: string; start_date: string | null; end_date: string | null; sort_order: number }, i: number) => (
+            {locations.map((loc: {
+              id: string; city: string; state: string | null; country: string
+              start_date: string | null; end_date: string | null; sort_order: number
+              label: string | null; company: string | null; role: string | null
+            }, i: number) => (
               <div key={loc.id} className="flex gap-3 pb-4 last:pb-0">
                 <div className="flex flex-col items-center">
                   <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -77,6 +88,14 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                   )}
                 </div>
                 <div className="pt-0.5 pb-4">
+                  {loc.label && (
+                    <p className="text-xs font-semibold text-primary mb-0.5">{loc.label}</p>
+                  )}
+                  {(loc.role || loc.company) && (
+                    <p className="text-xs text-muted-foreground mb-0.5">
+                      {[loc.role, loc.company].filter(Boolean).join(' @ ')}
+                    </p>
+                  )}
                   <p className="font-medium text-sm">
                     {loc.city}{loc.state ? `, ${loc.state}` : ''}{loc.country !== 'United States' ? `, ${loc.country}` : ''}
                   </p>
@@ -95,11 +114,21 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         <div className="rounded-2xl border border-border bg-card p-6">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">Travel interests</h2>
           <div className="flex flex-wrap gap-2">
-            {interests.map((interest: { id: string; destination_city: string; destination_country: string; notes: string | null }) => (
+            {interests.map((interest: {
+              id: string; destination_city: string; destination_country: string
+              notes: string | null; interest_start_date: string | null; interest_end_date: string | null
+            }) => (
               <div key={interest.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-sm">
                 <Globe size={11} className="text-muted-foreground" />
-                {interest.destination_city}
-                {interest.destination_country !== 'United States' ? `, ${interest.destination_country}` : ''}
+                <span>
+                  {interest.destination_city}
+                  {interest.destination_country !== 'United States' ? `, ${interest.destination_country}` : ''}
+                </span>
+                {(interest.interest_start_date || interest.interest_end_date) && (
+                  <span className="text-xs text-muted-foreground">
+                    · {formatDateRange(interest.interest_start_date, interest.interest_end_date)}
+                  </span>
+                )}
               </div>
             ))}
           </div>

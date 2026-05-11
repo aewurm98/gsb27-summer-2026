@@ -5,9 +5,10 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trek, TrekInterest, Profile } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Calendar, Users, Plus, Check, X, Loader2 } from 'lucide-react'
+import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane } from 'lucide-react'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 type FullTrek = Trek & {
   trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name' | 'photo_url'> | undefined })[]
@@ -150,11 +151,20 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
 
       {/* Trek list */}
       {treks.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <MapPin size={28} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No treks yet — check back soon!</p>
+        <div className="text-center space-y-4 py-12">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+            <Plane size={24} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg">Treks coming soon</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+              We&#39;re coordinating group trips based on classmate interest.
+              Add destinations to your <Link href="/profile/edit" className="text-primary underline underline-offset-2">travel interests</Link> and
+              we&#39;ll organize treks when we have critical mass.
+            </p>
+          </div>
           {isAdmin && (
-            <button onClick={() => setShowCreateForm(true)} className="mt-4 text-sm text-primary hover:underline">
+            <button onClick={() => setShowCreateForm(true)} className="mt-2 text-sm text-primary hover:underline">
               Create the first trek
             </button>
           )}

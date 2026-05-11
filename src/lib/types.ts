@@ -2,12 +2,13 @@ export interface Profile {
   id: string
   user_id: string
   full_name: string
-  linkedin_url: string | null
   photo_url: string | null
-  bio: string | null
   section: string | null
-  pre_mba_company: string | null
-  pre_mba_role: string | null
+  additional_details: string | null
+  can_host: boolean
+  hosting_details: string | null
+  open_to_visit: boolean
+  has_completed_profile: boolean
   is_admin: boolean
   created_at: string
   updated_at: string
@@ -27,6 +28,9 @@ export interface Location {
   start_date: string | null
   end_date: string | null
   sort_order: number
+  label: string | null
+  company: string | null
+  role: string | null
   created_at: string
 }
 
@@ -38,6 +42,8 @@ export interface TravelInterest {
   destination_lat: number | null
   destination_lng: number | null
   notes: string | null
+  interest_start_date: string | null
+  interest_end_date: string | null
   created_at: string
 }
 
@@ -62,7 +68,7 @@ export interface TrekInterest {
   profile_id: string
   status: 'interested' | 'confirmed' | 'declined'
   created_at: string
-  profile?: Profile
+  profile?: Pick<Profile, 'id' | 'full_name' | 'photo_url'>
 }
 
 export interface MapboxFeature {
@@ -77,5 +83,5 @@ export interface MapboxFeature {
 
 // Summer 2026 window
 export const SUMMER_START = new Date('2026-06-01')
-export const SUMMER_END = new Date('2026-09-14')
+export const SUMMER_END   = new Date('2026-09-14')
 export const SUMMER_WEEKS = 16

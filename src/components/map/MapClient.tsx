@@ -8,8 +8,9 @@ import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
 import { ChevronLeft, ChevronRight, Play, Pause, Users } from 'lucide-react'
 import Link from 'next/link'
+import { useMapStore } from '@/lib/map-store'
 
-type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url' | 'pre_mba_company' | 'pre_mba_role'> & {
+type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url'> & {
   locations: Location[]
 }
 
@@ -17,33 +18,35 @@ interface CityGroup {
   city: string
   lat: number
   lng: number
-  profiles: MapProfile[]
+  profiles: Array<MapProfile & { currentExperience?: { label: string | null; company: string | null; role: string | null } }>
 }
 
 export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
-  const popupRef = useRef<mapboxgl.Popup | null>(null)
 
-  const [weekIndex, setWeekIndex] = useState(0)
+  const { weekIndex, setWeekIndex } = useMapStore()
   const [playing, setPlaying] = useState(false)
   const [selectedCity, setSelectedCity] = useState<CityGroup | null>(null)
+  const [showWeekPicker, setShowWeekPicker] = useState(false)
   const weeks = getSummerWeeks()
 
-  // Group profiles by city for the current week
   const cityGroups = useMemo((): CityGroup[] => {
-    const map = new Map<string, CityGroup>()
+    const cityMap = new Map<string, CityGroup>()
     profiles.forEach(profile => {
       const loc = getLocationAtWeek(profile.locations ?? [], weekIndex)
       if (!loc) return
       const key = `${loc.city}|${loc.lat}|${loc.lng}`
-      if (!map.has(key)) {
-        map.set(key, { city: loc.city, lat: loc.lat, lng: loc.lng, profiles: [] })
+      if (!cityMap.has(key)) {
+        cityMap.set(key, { city: loc.city, lat: loc.lat, lng: loc.lng, profiles: [] })
       }
-      map.get(key)!.profiles.push(profile)
+      cityMap.get(key)!.profiles.push({
+        ...profile,
+        currentExperience: { label: loc.label, company: loc.company, role: loc.role },
+      })
     })
-    return Array.from(map.values())
+    return Array.from(cityMap.values())
   }, [profiles, weekIndex])
 
   useEffect(() => {
@@ -62,11 +65,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
   }, [])
 
-  // Update markers when week or data changes
   useEffect(() => {
     if (!map.current) return
 
-    // Clear existing markers
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
 
@@ -102,38 +103,67 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     })
   }, [cityGroups])
 
-  // Auto-play
   useEffect(() => {
     if (!playing) return
     const interval = setInterval(() => {
-      setWeekIndex(i => {
-        if (i >= SUMMER_WEEKS - 1) { setPlaying(false); return i }
-        return i + 1
-      })
+      if (weekIndex >= SUMMER_WEEKS - 1) {
+        setPlaying(false)
+      } else {
+        setWeekIndex(weekIndex + 1)
+      }
     }, 800)
     return () => clearInterval(interval)
-  }, [playing])
+  }, [playing, weekIndex, setWeekIndex])
 
   const activeCount = cityGroups.reduce((s, g) => s + g.profiles.length, 0)
 
   return (
     <div className="relative flex-1 flex">
-      {/* Map */}
       <div ref={mapContainer} className="flex-1" />
 
       {/* Week slider panel */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
-        <div className="rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg p-4">
+        <div className="relative rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg p-4">
+          {/* Week picker popup */}
+          {showWeekPicker && (
+            <div className="absolute bottom-full mb-2 left-0 right-0 bg-card border border-border rounded-xl p-3 shadow-lg z-10">
+              <div className="grid grid-cols-4 gap-1">
+                {weeks.map((week, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setWeekIndex(i); setShowWeekPicker(false) }}
+                    className={`px-2 py-1.5 rounded-lg text-xs text-left transition ${
+                      i === weekIndex
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-accent text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-medium">W{i + 1}</div>
+                    <div className="opacity-70">{week.dateLabel.split('–')[0].trim()}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm font-semibold">{weeks[weekIndex].label}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold">{weeks[weekIndex].label}</p>
+                <button
+                  onClick={() => setShowWeekPicker(p => !p)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                >
+                  Jump to week
+                </button>
+              </div>
               <p className="text-xs text-muted-foreground">
                 {weeks[weekIndex].dateLabel} · {activeCount} classmate{activeCount !== 1 ? 's' : ''} tracked
               </p>
             </div>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setWeekIndex(i => Math.max(0, i - 1))}
+                onClick={() => setWeekIndex(Math.max(0, weekIndex - 1))}
                 disabled={weekIndex === 0}
                 className="p-1.5 rounded-lg hover:bg-accent disabled:opacity-30 transition"
               >
@@ -146,7 +176,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
                 {playing ? <Pause size={16} /> : <Play size={16} />}
               </button>
               <button
-                onClick={() => setWeekIndex(i => Math.min(SUMMER_WEEKS - 1, i + 1))}
+                onClick={() => setWeekIndex(Math.min(SUMMER_WEEKS - 1, weekIndex + 1))}
                 disabled={weekIndex === SUMMER_WEEKS - 1}
                 className="p-1.5 rounded-lg hover:bg-accent disabled:opacity-30 transition"
               >
@@ -155,7 +185,6 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
             </div>
           </div>
 
-          {/* Slider */}
           <input
             type="range"
             min={0}
@@ -165,7 +194,6 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
             className="w-full accent-primary"
           />
 
-          {/* Week labels */}
           <div className="flex justify-between mt-1">
             <span className="text-xs text-muted-foreground">Jun 1</span>
             <span className="text-xs text-muted-foreground">Sep 14</span>
@@ -206,8 +234,11 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{profile.full_name}</p>
-                  {profile.pre_mba_company && (
-                    <p className="text-xs text-muted-foreground truncate">{profile.pre_mba_company}</p>
+                  {profile.currentExperience && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {[profile.currentExperience.role, profile.currentExperience.company]
+                        .filter(Boolean).join(' @ ') || profile.currentExperience.label}
+                    </p>
                   )}
                 </div>
               </Link>
@@ -216,7 +247,6 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </div>
       )}
 
-      {/* Legend */}
       <div className="absolute top-4 left-4 rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
         Click a marker to see classmates · Drag to explore
       </div>
