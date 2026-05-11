@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius: 0.625rem;
+  --font-sans: var(--font-inter);
+}
+
+:root {
+  --background: #fafafa;
+  --foreground: #111118;
+  --card: #ffffff;
+  --card-foreground: #111118;
+  --popover: #ffffff;
+  --popover-foreground: #111118;
+  --primary: #5046e5;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f6;
+  --secondary-foreground: #111118;
+  --muted: #f4f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #ededf0;
+  --accent-foreground: #111118;
+  --destructive: #ef4444;
+  --border: #e5e5ea;
+  --input: #e5e5ea;
+  --ring: #5046e5;
+}
+
+.dark {
+  --background: #0e0e12;
+  --foreground: #f0f0f5;
+  --card: #16161c;
+  --card-foreground: #f0f0f5;
+  --popover: #16161c;
+  --popover-foreground: #f0f0f5;
+  --primary: #6c63ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1e1e28;
+  --secondary-foreground: #f0f0f5;
+  --muted: #1e1e28;
+  --muted-foreground: #8b8b9e;
+  --accent: #22222e;
+  --accent-foreground: #f0f0f5;
+  --destructive: #f87171;
+  --border: #2a2a38;
+  --input: #2a2a38;
+  --ring: #6c63ff;
+}
+
+* {
+  border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Mapbox overrides */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib {
+  display: none !important;
+}
+
+.mapboxgl-popup-content {
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--card-foreground);
+  padding: 0;
+  overflow: hidden;
+}
+
+.dark .mapboxgl-popup-tip {
+  border-top-color: var(--card) !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
