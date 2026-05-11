@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Briefcase, Linkedin, Globe } from 'lucide-react'
+import { MapPin, Briefcase, ExternalLink, Globe } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -44,8 +44,8 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
           )}
           <div className="flex gap-3 mt-3">
             {profile.linkedin_url && (
-              <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition">
-                <Linkedin size={15} />
+              <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition">
+                <ExternalLink size={13} /> LinkedIn
               </a>
             )}
           </div>
