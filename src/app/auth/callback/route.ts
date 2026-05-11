@@ -9,8 +9,17 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (!error && data.user) {
+      const email = data.user.email ?? ''
+
+      // Enforce @stanford.edu domain for all providers
+      if (!email.toLowerCase().endsWith('@stanford.edu')) {
+        await supabase.auth.signOut()
+        return NextResponse.redirect(`${origin}/login?error=not_stanford`)
+      }
+
       return NextResponse.redirect(`${origin}${next}`)
     }
   }

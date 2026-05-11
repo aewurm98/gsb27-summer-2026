@@ -23,49 +23,51 @@
   --font-sans: var(--font-inter);
 }
 
+/* ── Stanford Light ── */
 :root {
-  --background: #fafafa;
-  --foreground: #111118;
-  --card: #ffffff;
-  --card-foreground: #111118;
-  --popover: #ffffff;
-  --popover-foreground: #111118;
-  --primary: #5046e5;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f6;
-  --secondary-foreground: #111118;
-  --muted: #f4f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #ededf0;
-  --accent-foreground: #111118;
-  --destructive: #ef4444;
-  --border: #e5e5ea;
-  --input: #e5e5ea;
-  --ring: #5046e5;
+  --background:         #F9F6F2;
+  --foreground:         #2E2D29;
+  --card:               #FFFFFF;
+  --card-foreground:    #2E2D29;
+  --popover:            #FFFFFF;
+  --popover-foreground: #2E2D29;
+  --primary:            #8C1515;
+  --primary-foreground: #FFFFFF;
+  --secondary:          #F0EAE4;
+  --secondary-foreground:#2E2D29;
+  --muted:              #F0EAE4;
+  --muted-foreground:   #7A6E6A;
+  --accent:             #EAE2DA;
+  --accent-foreground:  #2E2D29;
+  --destructive:        #C0392B;
+  --border:             #E2D9D1;
+  --input:              #E2D9D1;
+  --ring:               #8C1515;
 }
 
+/* ── Stanford Dark ── */
 .dark {
-  --background: #0e0e12;
-  --foreground: #f0f0f5;
-  --card: #16161c;
-  --card-foreground: #f0f0f5;
-  --popover: #16161c;
-  --popover-foreground: #f0f0f5;
-  --primary: #6c63ff;
-  --primary-foreground: #ffffff;
-  --secondary: #1e1e28;
-  --secondary-foreground: #f0f0f5;
-  --muted: #1e1e28;
-  --muted-foreground: #8b8b9e;
-  --accent: #22222e;
-  --accent-foreground: #f0f0f5;
-  --destructive: #f87171;
-  --border: #2a2a38;
-  --input: #2a2a38;
-  --ring: #6c63ff;
+  --background:         #1C1714;
+  --foreground:         #F0EDE8;
+  --card:               #251F1B;
+  --card-foreground:    #F0EDE8;
+  --popover:            #2E2622;
+  --popover-foreground: #F0EDE8;
+  --primary:            #C0392B;
+  --primary-foreground: #FFFFFF;
+  --secondary:          #322722;
+  --secondary-foreground:#F0EDE8;
+  --muted:              #322722;
+  --muted-foreground:   #9A8E8A;
+  --accent:             #3A2E2A;
+  --accent-foreground:  #F0EDE8;
+  --destructive:        #E05252;
+  --border:             #3A2E2A;
+  --input:              #3A2E2A;
+  --ring:               #C0392B;
 }
 
-* {
+*, *::before, *::after {
   border-color: var(--border);
   box-sizing: border-box;
 }
@@ -83,9 +85,7 @@ body {
 
 /* Mapbox overrides */
 .mapboxgl-ctrl-logo,
-.mapboxgl-ctrl-attrib {
-  display: none !important;
-}
+.mapboxgl-ctrl-attrib { display: none !important; }
 
 .mapboxgl-popup-content {
   border-radius: 12px;
@@ -97,9 +97,7 @@ body {
   overflow: hidden;
 }
 
-.dark .mapboxgl-popup-tip {
-  border-top-color: var(--card) !important;
-}
+.dark .mapboxgl-popup-tip { border-top-color: var(--card) !important; }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }

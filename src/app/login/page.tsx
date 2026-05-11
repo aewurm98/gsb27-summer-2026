@@ -1,136 +1,111 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { MapPin } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('')
+// Stanford Tree SVG mark
+function StanfordTree({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 52" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
+      {/* Trunk */}
+      <rect x="21" y="42" width="6" height="10" rx="1" fill="currentColor" opacity="0.8" />
+      {/* Lower boughs */}
+      <polygon points="24,6 4,44 44,44" fill="currentColor" opacity="0.25" />
+      {/* Middle layer */}
+      <polygon points="24,14 7,40 41,40" fill="currentColor" opacity="0.45" />
+      {/* Upper layer */}
+      <polygon points="24,4 11,32 37,32" fill="currentColor" opacity="0.7" />
+      {/* Top */}
+      <polygon points="24,0 15,24 33,24" fill="currentColor" />
+    </svg>
+  )
+}
+
+function LoginContent() {
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [cooldown, setCooldown] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
   const supabase = createClient()
 
-  useEffect(() => {
-    if (cooldown <= 0) {
-      if (timerRef.current) clearInterval(timerRef.current)
-      return
-    }
-    timerRef.current = setInterval(() => setCooldown(s => Math.max(0, s - 1)), 1000)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [cooldown])
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-
-    if (!email.toLowerCase().endsWith('@stanford.edu')) {
-      setError('Please use your @stanford.edu email address.')
-      return
-    }
-
-    setLoading(true)
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: { full_name: email.split('@')[0] },
-      },
-    })
-
-    if (error) {
-      const match = error.message.match(/after (\d+) seconds?/i)
-      if (match) {
-        setCooldown(parseInt(match[1], 10))
-      } else {
-        setError(error.message)
-      }
-    } else {
-      setSent(true)
-    }
-    setLoading(false)
+  const errorMessages: Record<string, string> = {
+    not_stanford: 'Only @stanford.edu Google accounts are allowed.',
+    auth_failed:  'Sign-in failed — please try again.',
   }
 
-  const isDisabled = loading || !email || cooldown > 0
+  async function handleGoogleSignIn() {
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: { hd: 'stanford.edu' },  // hints Google to show Stanford accounts first
+      },
+    })
+    if (error) setLoading(false)
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+      {/* Background accents */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
+        <div className="absolute -top-48 -right-48 w-96 h-96 rounded-full bg-primary/8 blur-3xl" />
+        <div className="absolute -bottom-48 -left-48 w-[28rem] h-[28rem] rounded-full bg-primary/5 blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 mb-4">
-            <MapPin className="text-primary" size={22} />
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-5">
+            <StanfordTree className="w-7 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">GSB Summer '26</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">GSB Summer '26</h1>
+          <p className="text-muted-foreground text-sm mt-2">
             Where is your cohort this summer?
           </p>
         </div>
 
-        {!sent ? (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="text-sm font-medium">
-                  Stanford email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@stanford.edu"
-                  required
-                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition"
-                />
-              </div>
-
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
-
-              {cooldown > 0 && (
-                <p className="text-sm text-muted-foreground text-center">
-                  Link sent — resend available in {cooldown}s
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={isDisabled}
-                className="w-full py-2.5 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
-              >
-                {loading ? 'Sending…' : cooldown > 0 ? `Resend in ${cooldown}s` : 'Send magic link'}
-              </button>
+        <div className="rounded-2xl border border-border bg-card p-8 shadow-sm space-y-5">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-3 text-center">
+              {errorMessages[error] ?? 'Something went wrong — please try again.'}
             </div>
+          )}
 
-            <p className="text-center text-xs text-muted-foreground">
-              No password needed — we'll email you a one-click sign-in link.
-            </p>
-          </form>
-        ) : (
-          <div className="rounded-2xl border border-border bg-card p-8 shadow-sm text-center space-y-2">
-            <div className="text-2xl mb-2">✉️</div>
-            <h2 className="font-semibold">Check your inbox</h2>
-            <p className="text-sm text-muted-foreground">
-              We sent a magic link to <strong>{email}</strong>. Click it to sign in.
-            </p>
-            <button
-              onClick={() => { setSent(false); setEmail('') }}
-              className="mt-4 text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
-            >
-              Use a different email
-            </button>
-          </div>
-        )}
+          <button
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-border bg-card hover:bg-accent text-foreground text-sm font-medium transition-all disabled:opacity-60 shadow-sm hover:shadow"
+          >
+            {/* Google "G" logo */}
+            <svg viewBox="0 0 24 24" className="w-5 h-5 shrink-0" aria-hidden>
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            {loading ? 'Redirecting…' : 'Sign in with Google'}
+          </button>
+
+          <p className="text-center text-xs text-muted-foreground leading-relaxed">
+            Use your <span className="font-medium text-foreground">@stanford.edu</span> Google account.<br />
+            Non-Stanford accounts will be declined.
+          </p>
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          GSB MBA Class of 2027 · Summer Travel Tracker
+        </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   )
 }

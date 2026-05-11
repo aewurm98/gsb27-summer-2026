@@ -77,9 +77,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         width: ${Math.max(36, 24 + group.profiles.length * 6)}px;
         height: ${Math.max(36, 24 + group.profiles.length * 6)}px;
         border-radius: 50%;
-        background: var(--primary, #5046e5);
+        background: var(--primary, #8C1515);
         border: 3px solid white;
-        box-shadow: 0 2px 12px rgba(80,70,229,0.4);
+        box-shadow: 0 2px 12px rgba(140,21,21,0.4);
         display: flex;
         align-items: center;
         justify-content: center;
