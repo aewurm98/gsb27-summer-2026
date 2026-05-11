@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MapPin } from 'lucide-react'
 
@@ -9,8 +9,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [cooldown, setCooldown] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    if (cooldown <= 0) {
+      if (timerRef.current) clearInterval(timerRef.current)
+      return
+    }
+    timerRef.current = setInterval(() => setCooldown(s => Math.max(0, s - 1)), 1000)
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [cooldown])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -31,23 +42,28 @@ export default function LoginPage() {
     })
 
     if (error) {
-      setError(error.message)
+      const match = error.message.match(/after (\d+) seconds?/i)
+      if (match) {
+        setCooldown(parseInt(match[1], 10))
+      } else {
+        setError(error.message)
+      }
     } else {
       setSent(true)
     }
     setLoading(false)
   }
 
+  const isDisabled = loading || !email || cooldown > 0
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
-      {/* Background gradient */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-sm">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 mb-4">
             <MapPin className="text-primary" size={22} />
@@ -80,12 +96,18 @@ export default function LoginPage() {
                 <p className="text-sm text-destructive">{error}</p>
               )}
 
+              {cooldown > 0 && (
+                <p className="text-sm text-muted-foreground text-center">
+                  Link sent — resend available in {cooldown}s
+                </p>
+              )}
+
               <button
                 type="submit"
-                disabled={loading || !email}
+                disabled={isDisabled}
                 className="w-full py-2.5 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
               >
-                {loading ? 'Sending...' : 'Send magic link'}
+                {loading ? 'Sending…' : cooldown > 0 ? `Resend in ${cooldown}s` : 'Send magic link'}
               </button>
             </div>
 
