@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useMemo } from 'react'
+import Image from 'next/image'
 import mapboxgl from 'mapbox-gl'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
@@ -196,9 +197,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
                 href={`/profile/${profile.id}`}
                 className="flex items-center gap-3 p-3 hover:bg-accent transition-colors"
               >
-                <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-semibold shrink-0 ${avatarColor(profile.full_name)}`}>
+                <div className={`relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-semibold shrink-0 ${avatarColor(profile.full_name)}`}>
                   {profile.photo_url
-                    ? <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
+                    ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />
                     : getInitials(profile.full_name)
                   }
                 </div>

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
+import Image from 'next/image'
 import { MapPin, Briefcase, ExternalLink, Globe } from 'lucide-react'
 import Link from 'next/link'
 
@@ -23,9 +24,9 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 space-y-6">
       {/* Header */}
       <div className="rounded-2xl border border-border bg-card p-6 flex items-start gap-4">
-        <div className={`w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(profile.full_name)}`}>
+        <div className={`relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(profile.full_name)}`}>
           {profile.photo_url
-            ? <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
+            ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />
             : getInitials(profile.full_name)
           }
         </div>

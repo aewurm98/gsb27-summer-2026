@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import Fuse from 'fuse.js'
 import { Profile, Location, TravelInterest } from '@/lib/types'
@@ -127,9 +128,9 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
               className="group rounded-2xl border border-border bg-card p-5 hover:shadow-md hover:border-primary/30 transition-all"
             >
               <div className="flex items-start gap-3 mb-3">
-                <div className={`w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center text-white font-semibold text-sm shrink-0 ${avatarColor(profile.full_name)}`}>
+                <div className={`relative w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center text-white font-semibold text-sm shrink-0 ${avatarColor(profile.full_name)}`}>
                   {profile.photo_url
-                    ? <img src={profile.photo_url} alt={profile.full_name} className="w-full h-full object-cover" />
+                    ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />
                     : getInitials(profile.full_name)
                   }
                 </div>

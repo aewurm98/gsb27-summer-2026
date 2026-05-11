@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trek, TrekInterest, Profile } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
@@ -215,11 +216,11 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
                       {interested.slice(0, 6).map(i => (
                         <div
                           key={i.id}
-                          className={`w-7 h-7 rounded-full border-2 border-card overflow-hidden flex items-center justify-center text-white text-xs font-semibold ${avatarColor(i.profile.full_name)}`}
+                          className={`relative w-7 h-7 rounded-full border-2 border-card overflow-hidden flex items-center justify-center text-white text-xs font-semibold ${avatarColor(i.profile.full_name)}`}
                           title={i.profile.full_name}
                         >
                           {i.profile.photo_url
-                            ? <img src={i.profile.photo_url} alt={i.profile.full_name} className="w-full h-full object-cover" />
+                            ? <Image src={i.profile.photo_url} alt={i.profile.full_name} fill className="object-cover" unoptimized />
                             : getInitials(i.profile.full_name)
                           }
                         </div>

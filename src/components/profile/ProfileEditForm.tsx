@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { CityAutocomplete } from './CityAutocomplete'
 import { Profile, Location, TravelInterest } from '@/lib/types'
 import { getOverlappingClassmates, formatDateRange, avatarColor, getInitials } from '@/lib/utils'
 import { Plus, Trash2, GripVertical, Save, Users, Loader2, Upload } from 'lucide-react'
-import { format } from 'date-fns'
 import { useRouter } from 'next/navigation'
 
 interface LocationDraft {
@@ -223,9 +223,9 @@ export function ProfileEditForm({
 
         {/* Photo upload */}
         <div className="flex items-center gap-4">
-          <div className={`w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(fullName || 'A')}`}>
+          <div className={`relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(fullName || 'A')}`}>
             {photoUrl
-              ? <img src={photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ? <Image src={photoUrl} alt="Avatar" fill className="object-cover" unoptimized />
               : getInitials(fullName || '?')
             }
           </div>
