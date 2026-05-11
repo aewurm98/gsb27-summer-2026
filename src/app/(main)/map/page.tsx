@@ -1,10 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import dynamic from 'next/dynamic'
-
-const MapClient = dynamic(
-  () => import('@/components/map/MapClient').then((m) => m.MapClient),
-  { ssr: false }
-)
+import { MapWrapper } from './MapWrapper'
 
 export default async function MapPage() {
   const supabase = await createClient()
@@ -16,7 +11,7 @@ export default async function MapPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      <MapClient profiles={profiles ?? []} />
+      <MapWrapper profiles={profiles ?? []} />
     </div>
   )
 }
