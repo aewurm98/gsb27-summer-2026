@@ -10,7 +10,7 @@ import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
 
 type FullTrek = Trek & {
-  trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name' | 'photo_url'> })[]
+  trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name' | 'photo_url'> | undefined })[]
 }
 
 interface Props {
@@ -216,18 +216,18 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
                       {interested.slice(0, 6).map(i => (
                         <div
                           key={i.id}
-                          className={`relative w-7 h-7 rounded-full border-2 border-card overflow-hidden flex items-center justify-center text-white text-xs font-semibold ${avatarColor(i.profile.full_name)}`}
-                          title={i.profile.full_name}
+                          className={`relative w-7 h-7 rounded-full border-2 border-card overflow-hidden flex items-center justify-center text-white text-xs font-semibold ${avatarColor(i.profile?.full_name ?? '')}`}
+                          title={i.profile?.full_name}
                         >
-                          {i.profile.photo_url
-                            ? <Image src={i.profile.photo_url} alt={i.profile.full_name} fill className="object-cover" unoptimized />
-                            : getInitials(i.profile.full_name)
+                          {i.profile?.photo_url
+                            ? <Image src={i.profile.photo_url} alt={i.profile?.full_name ?? ''} fill className="object-cover" unoptimized />
+                            : getInitials(i.profile?.full_name ?? '')
                           }
                         </div>
                       ))}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {interested.slice(0, 2).map(i => i.profile.full_name.split(' ')[0]).join(', ')}
+                      {interested.slice(0, 2).map(i => i.profile?.full_name?.split(' ')[0] ?? '').join(', ')}
                       {interested.length > 2 ? ` +${interested.length - 2} more` : ''}
                     </p>
                   </div>

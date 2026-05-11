@@ -8,7 +8,7 @@ import Link from 'next/link'
 import Papa from 'papaparse'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
-type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name'> })[] }
+type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name'> | undefined })[] }
 
 interface Props {
   profiles: FullProfile[]
@@ -28,12 +28,12 @@ export function AdminClient({ profiles, treks }: Props) {
             pre_mba_company: p.pre_mba_company ?? '',
             pre_mba_role: p.pre_mba_role ?? '',
             linkedin_url: p.linkedin_url ?? '',
-            stop_order: i + 1,
+            stop_order: String(i + 1),
             city: loc.city,
             state: loc.state ?? '',
             country: loc.country,
-            lat: loc.lat,
-            lng: loc.lng,
+            lat: String(loc.lat),
+            lng: String(loc.lng),
             start_date: loc.start_date ?? '',
             end_date: loc.end_date ?? '',
             travel_interests: p.travel_interests?.map(t => t.destination_city).join('; ') ?? '',
@@ -212,7 +212,7 @@ export function AdminClient({ profiles, treks }: Props) {
                       <span key={i.id} className={`text-xs px-2 py-0.5 rounded-full ${
                         i.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-accent'
                       }`}>
-                        {i.profile.full_name}
+                        {i.profile?.full_name}
                         {i.status === 'confirmed' ? ' ✓' : ''}
                       </span>
                     ))}
