@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import Image from 'next/image'
 import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
 import { ChevronLeft, ChevronRight, Play, Pause, Users } from 'lucide-react'

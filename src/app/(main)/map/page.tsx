@@ -1,5 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
-import { MapClient } from '@/components/map/MapClient'
+import dynamic from 'next/dynamic'
+
+const MapClient = dynamic(
+  () => import('@/components/map/MapClient').then((m) => m.MapClient),
+  { ssr: false }
+)
 
 export default async function MapPage() {
   const supabase = await createClient()
