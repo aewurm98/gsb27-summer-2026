@@ -5,7 +5,7 @@
  * Requires env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
 
-import * as xlsx from 'xlsx'
+import xlsx from 'xlsx'
 import { createClient } from '@supabase/supabase-js'
 import path from 'path'
 import { fileURLToPath } from 'url'
