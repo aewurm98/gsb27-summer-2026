@@ -151,6 +151,16 @@ async function main() {
       console.log(`  → Created profile ${profileId}`)
     }
 
+    // Preserve any manually-set so_name values before wiping locations
+    const { data: existingLocs } = await supabase
+      .from('locations')
+      .select('sort_order, so_name')
+      .eq('profile_id', profileId)
+    const soNameBySortOrder: Record<number, string | null> = {}
+    for (const el of existingLocs ?? []) {
+      soNameBySortOrder[el.sort_order] = el.so_name ?? null
+    }
+
     await supabase.from('locations').delete().eq('profile_id', profileId)
 
     for (let i = 0; i < cm.stops.length; i++) {
@@ -173,6 +183,7 @@ async function main() {
         start_date: stop.start_date,
         end_date: stop.end_date,
         sort_order: i,
+        so_name: soNameBySortOrder[i] ?? null,
       })
 
       if (error) {
