@@ -167,6 +167,7 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
                         {loc.city}
                         {loc.country !== 'United States' ? `, ${loc.country}` : ''}
                         {loc.label ? ` · ${loc.label}` : ''}
+                        {loc.so_name ? ` · w/ ${loc.so_name}` : ''}
                         {' · '}
                         {formatDateRange(loc.start_date, loc.end_date)}
                       </span>

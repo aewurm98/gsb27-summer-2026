@@ -25,6 +25,7 @@ interface LocationDraft {
   label: string
   company: string
   role: string
+  so_name: string
 }
 
 interface InterestDraft {
@@ -44,7 +45,7 @@ function newLocationDraft(order: number): LocationDraft {
   return {
     city: '', city_ascii: null, state: null, country: 'United States',
     lat: null, lng: null, start_date: '', end_date: '', sort_order: order,
-    label: 'Summer Internship', company: '', role: '',
+    label: 'Summer Internship', company: '', role: '', so_name: '',
   }
 }
 
@@ -81,6 +82,7 @@ export function ProfileEditForm({
             label: l.label ?? 'Summer Internship',
             company: l.company ?? '',
             role: l.role ?? '',
+            so_name: l.so_name ?? '',
           }))
       : [newLocationDraft(0)]
   )
@@ -198,6 +200,7 @@ export function ProfileEditForm({
             label: l.label || null,
             company: l.company || null,
             role: l.role || null,
+            so_name: l.so_name || null,
           }))
         )
         if (locErr) throw locErr
@@ -454,6 +457,15 @@ export function ProfileEditForm({
                     className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Significant other joining? <span className="text-muted-foreground/60">(optional — first name only)</span></label>
+                <input
+                  value={loc.so_name}
+                  onChange={e => updateLocation(i, { so_name: e.target.value })}
+                  placeholder="e.g. Gracie"
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
               </div>
             </div>
           ))}

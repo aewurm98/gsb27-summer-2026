@@ -76,7 +76,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
             {locations.map((loc: {
               id: string; city: string; state: string | null; country: string
               start_date: string | null; end_date: string | null; sort_order: number
-              label: string | null; company: string | null; role: string | null
+              label: string | null; company: string | null; role: string | null; so_name: string | null
             }, i: number) => (
               <div key={loc.id} className="flex gap-3 pb-4 last:pb-0">
                 <div className="flex flex-col items-center">
@@ -102,6 +102,11 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {formatDateRange(loc.start_date, loc.end_date)}
                   </p>
+                  {loc.so_name && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      w/ {loc.so_name} <span className="opacity-60">(SO)</span>
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

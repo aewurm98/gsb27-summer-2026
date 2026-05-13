@@ -32,6 +32,7 @@ export interface Location {
   label: string | null
   company: string | null
   role: string | null
+  so_name: string | null
   created_at: string
 }
 
