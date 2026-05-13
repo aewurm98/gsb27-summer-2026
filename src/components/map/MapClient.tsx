@@ -74,9 +74,14 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     cityGroups.forEach(group => {
       const el = document.createElement('div')
       el.className = 'map-marker'
-      el.style.cssText = `
-        width: ${Math.max(36, 24 + group.profiles.length * 6)}px;
-        height: ${Math.max(36, 24 + group.profiles.length * 6)}px;
+      // Outer el is owned by Mapbox (it sets transform for positioning) — never touch el.style.transform
+      el.style.cssText = `width: ${Math.max(36, 24 + group.profiles.length * 6)}px; height: ${Math.max(36, 24 + group.profiles.length * 6)}px; cursor: pointer;`
+
+      const inner = document.createElement('div')
+      const size = Math.max(36, 24 + group.profiles.length * 6)
+      inner.style.cssText = `
+        width: ${size}px;
+        height: ${size}px;
         border-radius: 50%;
         background: var(--primary, #8C1515);
         border: 3px solid white;
@@ -87,12 +92,19 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         color: white;
         font-weight: 700;
         font-size: 12px;
-        cursor: pointer;
-        transition: transform 0.2s;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
       `
-      el.innerHTML = group.profiles.length === 1 ? getInitials(group.profiles[0].full_name) : String(group.profiles.length)
-      el.onmouseenter = () => { el.style.transform = 'scale(1.15)' }
-      el.onmouseleave = () => { el.style.transform = 'scale(1)' }
+      inner.textContent = group.profiles.length === 1 ? getInitials(group.profiles[0].full_name) : String(group.profiles.length)
+      el.appendChild(inner)
+
+      el.onmouseenter = () => {
+        inner.style.transform = 'scale(1.2)'
+        inner.style.boxShadow = '0 4px 18px rgba(140,21,21,0.55)'
+      }
+      el.onmouseleave = () => {
+        inner.style.transform = 'scale(1)'
+        inner.style.boxShadow = '0 2px 12px rgba(140,21,21,0.4)'
+      }
       el.onclick = () => setSelectedCity(group)
 
       const marker = new mapboxgl.Marker({ element: el })
