@@ -208,7 +208,7 @@ export function AdminClient({ profiles, treks }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  {['Name', 'Section', 'Hosting', 'Locations', 'Interests'].map(h => (
+                  {['Name', 'Hometown', 'Hosting', 'Locations', 'Interests'].map(h => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -315,8 +315,8 @@ export function AdminClient({ profiles, treks }: Props) {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 group">
-                          <span className={p.email ? 'text-foreground' : 'text-muted-foreground italic'}>
+                        <div className="flex items-center gap-2">
+                          <span className={p.email ? 'text-foreground text-sm' : 'text-muted-foreground italic text-sm'}>
                             {p.email ?? 'not set'}
                           </span>
                           <button
@@ -324,7 +324,8 @@ export function AdminClient({ profiles, treks }: Props) {
                               setEditingId(p.id)
                               setEditEmail(p.email ?? '')
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:bg-accent transition"
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition"
+                            title="Edit email"
                           >
                             <Pencil size={12} />
                           </button>
@@ -333,11 +334,11 @@ export function AdminClient({ profiles, treks }: Props) {
                     </td>
                     <td className="px-4 py-3">
                       {p.user_id ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        <span className="inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium bg-emerald-600 text-white">
                           Claimed
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        <span className="inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium bg-amber-500 text-white">
                           Pre-seeded
                         </span>
                       )}
