@@ -436,7 +436,7 @@ export function ProfileEditForm({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Start date</label>
+                  <label className="text-xs text-muted-foreground">Start date <span className="text-muted-foreground/60">(leave blank if TBD)</span></label>
                   <input
                     type="date"
                     value={loc.start_date}
@@ -447,7 +447,7 @@ export function ProfileEditForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">End date</label>
+                  <label className="text-xs text-muted-foreground">End date <span className="text-muted-foreground/60">(leave blank if TBD)</span></label>
                   <input
                     type="date"
                     value={loc.end_date}

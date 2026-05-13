@@ -26,9 +26,20 @@ export function getLocationAtWeek(locations: Location[], weekIndex: number): Loc
   const week = weeks[weekIndex]
   if (!week) return null
 
-  for (const loc of locations) {
-    const start = loc.start_date ? parseISO(loc.start_date) : SUMMER_START
-    const end = loc.end_date ? parseISO(loc.end_date) : addWeeks(SUMMER_START, SUMMER_WEEKS)
+  const SUMMER_END = addWeeks(SUMMER_START, SUMMER_WEEKS)
+  // Sort by sort_order so adjacent-stop fallbacks are correct
+  const sorted = [...locations].sort((a, b) => a.sort_order - b.sort_order)
+
+  for (let i = 0; i < sorted.length; i++) {
+    const loc = sorted[i]
+    // Fill null start from previous stop's end, or summer start
+    const start = loc.start_date
+      ? parseISO(loc.start_date)
+      : (sorted[i - 1]?.end_date ? parseISO(sorted[i - 1].end_date!) : SUMMER_START)
+    // Fill null end from next stop's start, or summer end
+    const end = loc.end_date
+      ? parseISO(loc.end_date)
+      : (sorted[i + 1]?.start_date ? parseISO(sorted[i + 1].start_date!) : SUMMER_END)
 
     if (isWithinInterval(week.start, { start, end }) || isWithinInterval(week.end, { start, end }) ||
         (start <= week.start && end >= week.end)) {
@@ -76,8 +87,8 @@ export function getOverlappingClassmates(
 
 export function formatDateRange(start: string | null, end: string | null): string {
   if (!start && !end) return 'Dates TBD'
-  if (start && !end) return `${format(parseISO(start), 'MMM d')} – ?`
-  if (!start && end) return `? – ${format(parseISO(end), 'MMM d')}`
+  if (start && !end) return `${format(parseISO(start), 'MMM d')} – TBD`
+  if (!start && end) return `TBD – ${format(parseISO(end), 'MMM d')}`
   return `${format(parseISO(start!), 'MMM d')} – ${format(parseISO(end!), 'MMM d')}`
 }
 
