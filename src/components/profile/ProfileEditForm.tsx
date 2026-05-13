@@ -272,7 +272,7 @@ export function ProfileEditForm({
         <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">About me</h2>
 
         <div className="flex items-center gap-4">
-          <div className={`relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(fullName || 'A')}`}>
+          <div className={`relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(profile?.full_name || 'A')}`}>
             {photoUrl
               ? <Image src={photoUrl} alt="Avatar" fill className="object-cover" unoptimized />
               : getInitials(fullName || '?')
@@ -294,16 +294,16 @@ export function ProfileEditForm({
               value={fullName}
               onChange={e => setFullName(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Alex Wurm"
+              placeholder="Your full name"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">GSB Section</label>
+            <label className="text-xs font-medium text-muted-foreground">Hometown <span className="text-muted-foreground/60">(optional)</span></label>
             <input
               value={section}
               onChange={e => setSection(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Section A"
+              placeholder="e.g. Denver, CO"
             />
           </div>
           <div className="space-y-1 sm:col-span-2">

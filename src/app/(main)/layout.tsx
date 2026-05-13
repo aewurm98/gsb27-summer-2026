@@ -9,11 +9,13 @@ export default async function MainLayout({ children }: { children: React.ReactNo
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .eq('user_id', user.id)
     .single()
+
+  console.log('[layout] user.id:', user.id, '| profile:', profile?.full_name ?? 'NULL', '| error:', profileError?.message ?? 'none')
 
   if (profile && !profile.has_completed_profile) {
     const headersList = await headers()
