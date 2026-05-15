@@ -99,7 +99,7 @@ export interface MatchResult {
   reasons: string[]  // human-readable chips e.g. "3w overlap in Tokyo"
 }
 
-type MatchProfile = Pick<Profile, 'id' | 'activity_tags' | 'trip_style' | 'group_size_pref'> & {
+type MatchProfile = Pick<Profile, 'id' | 'activity_tags' | 'trip_style' | 'group_size_pref' | 'travel_budget' | 'travel_pace'> & {
   locations: Location[]
   travel_interests: TravelInterest[]
 }
@@ -151,10 +151,23 @@ export function getMatchScore(me: MatchProfile, them: MatchProfile): MatchResult
     reasons.push(`Both into ${sharedTags.slice(0, 3).join(', ')}`)
   }
 
-  // 4. Trip style match — 10 pts
+  // 4. Preference matches — up to 15 pts
+  // Trip vibe match (5 pts)
   if (me.trip_style && them.trip_style && me.trip_style === them.trip_style) {
-    score += 10
-    reasons.push(`${me.trip_style[0].toUpperCase()}${me.trip_style.slice(1)} travel style`)
+    score += 5
+    const label = me.trip_style === 'nightlife' ? 'social & nightlife' : me.trip_style
+    reasons.push(`Same vibe (${label})`)
+  }
+  // Budget match (5 pts)
+  if (me.travel_budget && them.travel_budget && me.travel_budget === them.travel_budget) {
+    score += 5
+    reasons.push(`Same budget style`)
+  }
+  // Pace match (5 pts)
+  if (me.travel_pace && them.travel_pace && me.travel_pace === them.travel_pace) {
+    score += 5
+    const paceLabel = me.travel_pace === 'fast-paced' ? 'fast-paced' : me.travel_pace === 'slow-immersive' ? 'slow & deep' : 'balanced pace'
+    reasons.push(`Same pace (${paceLabel})`)
   }
 
   return { score: Math.min(100, score), reasons }

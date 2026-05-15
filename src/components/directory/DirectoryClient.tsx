@@ -7,6 +7,29 @@ import Fuse from 'fuse.js'
 import { Profile, Location, TravelInterest } from '@/lib/types'
 import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek, getMatchScore } from '@/lib/utils'
 import { Search, MapPin, SlidersHorizontal, X, Sparkles, ArrowUpDown } from 'lucide-react'
+// (Sparkles still used on the sort toggle button)
+
+// Harvey-ball donut: score 0–100, colored by threshold
+function MatchBall({ score }: { score: number }) {
+  const r = 7, size = 18, cx = 9, cy = 9
+  const circ = 2 * Math.PI * r
+  const fill = (score / 100) * circ
+  const color = score >= 70 ? '#16a34a' : score >= 45 ? '#ca8a04' : '#ea580c'
+  const label = score >= 70 ? 'Strong' : score >= 45 ? 'Good' : 'Some'
+  return (
+    <span className="flex items-center gap-1 shrink-0">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeOpacity={0.2} strokeWidth={2.5} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={2.5}
+          strokeDasharray={`${fill} ${circ - fill}`}
+          transform={`rotate(-90 ${cx} ${cy})`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="text-xs font-semibold" style={{ color }}>{label}</span>
+    </span>
+  )
+}
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
 
@@ -223,23 +246,19 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
                       {profile.full_name}
                       {profile.id === myProfileId && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(you)</span>}
                     </p>
-                    {match && match.score > 0 && (
-                      <span className="shrink-0 flex items-center gap-0.5 text-xs font-semibold text-primary">
-                        <Sparkles size={10} />{match.score}
-                      </span>
-                    )}
+                    {match && match.score > 0 && <MatchBall score={match.score} />}
                   </div>
                   {profile.section && (
                     <p className="text-xs text-muted-foreground truncate mt-0.5">{profile.section}</p>
                   )}
                   <div className="flex gap-1 mt-1">
                     {profile.can_host && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-700">
                         🏠 Host
                       </span>
                     )}
                     {profile.open_to_visit && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-sky-50 text-sky-800 border-sky-300 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-700">
                         ✈️ Visitor
                       </span>
                     )}

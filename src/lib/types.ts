@@ -14,6 +14,8 @@ export interface Profile {
   activity_tags: string[]
   trip_style: 'adventure' | 'cultural' | 'relaxation' | 'foodie' | 'nightlife' | 'mixed' | null
   group_size_pref: 'solo' | 'small (2-4)' | 'medium (5-10)' | 'large (10+)' | 'any' | null
+  travel_budget: 'budget' | 'moderate' | 'splurge' | null
+  travel_pace: 'fast-paced' | 'balanced' | 'slow-immersive' | null
   created_at: string
   updated_at: string
   locations?: Location[]
@@ -36,6 +38,7 @@ export interface Location {
   company: string | null
   role: string | null
   so_name: string | null
+  neighborhood: string | null
   created_at: string
 }
 

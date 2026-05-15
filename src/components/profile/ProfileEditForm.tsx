@@ -11,14 +11,59 @@ import { useRouter } from 'next/navigation'
 
 const EXPERIENCE_LABELS = ['Summer Internship', 'Traveling', 'Visiting family/friends', 'Other'] as const
 
-const ACTIVITY_TAGS = [
-  'hiking', 'surfing', 'skiing', 'cycling', 'running', 'yoga',
-  'food & wine', 'nightlife', 'art & culture', 'history', 'beaches',
-  'mountains', 'cities', 'road trips', 'backpacking', 'luxury',
+// Activity tags grouped by category (stored as flat strings)
+const ACTIVITY_TAG_GROUPS = [
+  {
+    label: 'Outdoors',
+    tags: ['hiking', 'backpacking', 'cycling', 'rock climbing', 'water sports', 'snow sports', 'golf'],
+  },
+  {
+    label: 'Food & Drink',
+    tags: ['fine dining', 'street food & markets', 'wine & cocktails', 'craft beer', 'cooking classes'],
+  },
+  {
+    label: 'Arts & Culture',
+    tags: ['museums & galleries', 'live music & concerts', 'theater & performance', 'historical sites'],
+  },
+  {
+    label: 'Wellness',
+    tags: ['yoga & pilates', 'running', 'fitness & gym', 'spa & wellness'],
+  },
+  {
+    label: 'Nightlife & Social',
+    tags: ['bars & nightlife', 'sports events', 'rooftop lounges', 'festivals & events'],
+  },
 ] as const
 
-const TRIP_STYLES = ['adventure', 'cultural', 'relaxation', 'foodie', 'nightlife', 'mixed'] as const
-const GROUP_SIZE_PREFS = ['solo', 'small (2-4)', 'medium (5-10)', 'large (10+)', 'any'] as const
+const TRIP_STYLE_OPTIONS = [
+  { value: 'adventure', label: 'Adventure-first' },
+  { value: 'cultural', label: 'Culture-first' },
+  { value: 'foodie', label: 'Foodie' },
+  { value: 'relaxation', label: 'Relaxation' },
+  { value: 'nightlife', label: 'Social & nightlife' },
+  { value: 'mixed', label: 'Mixed bag' },
+] as const
+
+const GROUP_SIZE_OPTIONS = [
+  { value: 'solo', label: 'Solo' },
+  { value: 'small (2-4)', label: '2–4 people' },
+  { value: 'medium (5-10)', label: '5–10 people' },
+  { value: 'large (10+)', label: '10+ people' },
+  { value: 'any', label: 'Any size' },
+] as const
+
+const TRAVEL_PACE_OPTIONS = [
+  { value: 'fast-paced', label: 'Pack it in' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'slow-immersive', label: 'Slow & deep' },
+] as const
+
+const TRAVEL_BUDGET_OPTIONS = [
+  { value: 'budget', label: 'Budget-conscious' },
+  { value: 'moderate', label: 'Moderate' },
+  { value: 'splurge', label: 'Splurge-worthy' },
+] as const
+
 const INTENT_OPTIONS = ['working remotely', 'tourism', 'visiting family', 'conference', 'open'] as const
 
 interface LocationDraft {
@@ -36,6 +81,7 @@ interface LocationDraft {
   company: string
   role: string
   so_name: string
+  neighborhood: string
 }
 
 interface InterestDraft {
@@ -56,7 +102,7 @@ function newLocationDraft(order: number): LocationDraft {
   return {
     city: '', city_ascii: null, state: null, country: 'United States',
     lat: null, lng: null, start_date: '', end_date: '', sort_order: order,
-    label: 'Summer Internship', company: '', role: '', so_name: '',
+    label: 'Summer Internship', company: '', role: '', so_name: '', neighborhood: '',
   }
 }
 
@@ -94,6 +140,7 @@ export function ProfileEditForm({
             company: l.company ?? '',
             role: l.role ?? '',
             so_name: l.so_name ?? '',
+            neighborhood: l.neighborhood ?? '',
           }))
       : [newLocationDraft(0)]
   )
@@ -116,8 +163,11 @@ export function ProfileEditForm({
   const [activityTags, setActivityTags] = useState<Set<string>>(
     new Set(profile?.activity_tags ?? [])
   )
+  const [customTag, setCustomTag] = useState('')
   const [tripStyle, setTripStyle] = useState<string>(profile?.trip_style ?? '')
   const [groupSizePref, setGroupSizePref] = useState<string>(profile?.group_size_pref ?? '')
+  const [travelBudget, setTravelBudget] = useState<string>(profile?.travel_budget ?? '')
+  const [travelPace, setTravelPace] = useState<string>(profile?.travel_pace ?? '')
 
   function toggleActivityTag(tag: string) {
     setActivityTags(prev => {
@@ -125,6 +175,14 @@ export function ProfileEditForm({
       next.has(tag) ? next.delete(tag) : next.add(tag)
       return next
     })
+  }
+
+  function addCustomTag() {
+    const t = customTag.trim().toLowerCase()
+    if (t && !activityTags.has(t)) {
+      setActivityTags(prev => new Set([...prev, t]))
+    }
+    setCustomTag('')
   }
 
   const [saving, setSaving] = useState(false)
@@ -204,6 +262,8 @@ export function ProfileEditForm({
           activity_tags: Array.from(activityTags),
           trip_style: tripStyle || null,
           group_size_pref: groupSizePref || null,
+          travel_budget: travelBudget || null,
+          travel_pace: travelPace || null,
         })
         .select()
         .single()
@@ -231,6 +291,7 @@ export function ProfileEditForm({
             company: l.company || null,
             role: l.role || null,
             so_name: l.so_name || null,
+            neighborhood: l.neighborhood || null,
           }))
         )
         if (locErr) throw locErr
@@ -381,70 +442,157 @@ export function ProfileEditForm({
       </section>
 
       {/* Travel Preferences */}
-      <section className="rounded-2xl border border-border bg-card p-6 space-y-5">
+      <section className="rounded-2xl border border-border bg-card p-6 space-y-6">
         <div>
           <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Travel preferences</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Help classmates find their best travel match.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Help classmates find their best travel match — the more you fill in, the better the matching.</p>
         </div>
 
-        {/* Activity tags */}
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">Activities you enjoy</label>
-          <div className="flex flex-wrap gap-1.5">
-            {ACTIVITY_TAGS.map(tag => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => toggleActivityTag(tag)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
-                  activityTags.has(tag)
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
+        {/* Activity tags — grouped */}
+        <div className="space-y-3">
+          <label className="text-xs font-medium text-muted-foreground">Activities you enjoy <span className="text-muted-foreground/60">(pick all that apply)</span></label>
+          {ACTIVITY_TAG_GROUPS.map(group => (
+            <div key={group.label} className="space-y-1.5">
+              <p className="text-xs text-muted-foreground/70 font-medium">{group.label}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {group.tags.map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleActivityTag(tag)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition focus-visible:outline-none ${
+                      activityTags.has(tag)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {/* Custom "other" tags */}
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground/70 font-medium">Other</p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {/* Show custom (non-preset) tags */}
+              {Array.from(activityTags)
+                .filter(t => !ACTIVITY_TAG_GROUPS.flatMap(g => g.tags).includes(t as never))
+                .map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleActivityTag(tag)}
+                    className="px-2.5 py-1 rounded-full text-xs font-medium border bg-primary text-primary-foreground border-primary transition focus-visible:outline-none"
+                  >
+                    {tag} ×
+                  </button>
+                ))}
+              <div className="flex items-center gap-1">
+                <input
+                  value={customTag}
+                  onChange={e => setCustomTag(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
+                  placeholder="Add your own…"
+                  className="px-2.5 py-1 rounded-full text-xs border border-dashed border-border bg-background text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 w-36"
+                />
+                {customTag.trim() && (
+                  <button
+                    type="button"
+                    onClick={addCustomTag}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Add
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Trip style */}
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">Travel style</label>
-          <div className="flex flex-wrap gap-1.5">
-            {TRIP_STYLES.map(style => (
-              <button
-                key={style}
-                type="button"
-                onClick={() => setTripStyle(s => s === style ? '' : style)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border capitalize transition ${
-                  tripStyle === style
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
-                }`}
-              >
-                {style}
-              </button>
-            ))}
+        {/* Three single-select rows */}
+        <div className="grid sm:grid-cols-3 gap-5">
+          {/* Primary vibe */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Primary vibe</label>
+            <div className="flex flex-col gap-1.5">
+              {TRIP_STYLE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTripStyle(s => s === value ? '' : value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border text-left transition focus-visible:outline-none ${
+                    tripStyle === value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Travel pace */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Travel pace</label>
+            <div className="flex flex-col gap-1.5">
+              {TRAVEL_PACE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTravelPace(s => s === value ? '' : value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border text-left transition focus-visible:outline-none ${
+                    travelPace === value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Budget */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Budget style</label>
+            <div className="flex flex-col gap-1.5">
+              {TRAVEL_BUDGET_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTravelBudget(s => s === value ? '' : value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border text-left transition focus-visible:outline-none ${
+                    travelBudget === value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Group size preference */}
+        {/* Group size */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">Preferred group size</label>
           <div className="flex flex-wrap gap-1.5">
-            {GROUP_SIZE_PREFS.map(size => (
+            {GROUP_SIZE_OPTIONS.map(({ value, label }) => (
               <button
-                key={size}
+                key={value}
                 type="button"
-                onClick={() => setGroupSizePref(s => s === size ? '' : size)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                  groupSizePref === size
+                onClick={() => setGroupSizePref(s => s === value ? '' : value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition focus-visible:outline-none ${
+                  groupSizePref === value
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
                 }`}
               >
-                {size}
+                {label}
               </button>
             ))}
           </div>
@@ -560,14 +708,25 @@ export function ProfileEditForm({
                   />
                 </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Significant other joining? <span className="text-muted-foreground/60">(optional — first name only)</span></label>
-                <input
-                  value={loc.so_name}
-                  onChange={e => updateLocation(i, { so_name: e.target.value })}
-                  placeholder="e.g. Gracie"
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Neighborhood / area <span className="text-muted-foreground/60">(optional)</span></label>
+                  <input
+                    value={loc.neighborhood}
+                    onChange={e => updateLocation(i, { neighborhood: e.target.value })}
+                    placeholder="e.g. Capitol Hill, SoMa"
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">SO joining? <span className="text-muted-foreground/60">(first name only)</span></label>
+                  <input
+                    value={loc.so_name}
+                    onChange={e => updateLocation(i, { so_name: e.target.value })}
+                    placeholder="e.g. Gracie"
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
               </div>
             </div>
           ))}

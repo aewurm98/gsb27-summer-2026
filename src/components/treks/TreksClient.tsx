@@ -299,14 +299,15 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
           <div>
             <h3 className="font-semibold text-lg">Treks coming soon</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              We&#39;re coordinating group trips based on classmate interest.
-              Add destinations to your <Link href="/profile/edit" className="text-primary underline underline-offset-2">travel interests</Link> and
-              we&#39;ll organize treks when we have critical mass.
+              Admins will organize group trips based on classmate interest.
+              Add destinations to your{' '}
+              <Link href="/profile/edit" className="text-primary underline underline-offset-2">travel interests</Link>
+              {' '}and treks will be created when enough classmates want the same destination.
             </p>
           </div>
           {isAdmin && (
             <button onClick={() => setShowCreateForm(true)} className="mt-2 text-sm text-primary hover:underline">
-              Create the first trek
+              + Create the first trek (admin only)
             </button>
           )}
         </div>

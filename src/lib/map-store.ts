@@ -6,6 +6,6 @@ interface MapState {
 }
 
 export const useMapStore = create<MapState>((set) => ({
-  weekIndex: 0,
+  weekIndex: 2, // default to Week 3 — most classmates have started by then
   setWeekIndex: (weekIndex) => set({ weekIndex }),
 }))

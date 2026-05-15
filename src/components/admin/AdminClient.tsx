@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Profile, Location, TravelInterest, Trek, TrekInterest } from '@/lib/types'
 import { formatDateRange, getSummerWeeks, getLocationAtWeek } from '@/lib/utils'
-import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus, BarChart2, Grid, ClipboardList } from 'lucide-react'
+import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus, BarChart2, LayoutGrid, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
@@ -507,7 +507,7 @@ export function AdminClient({ profiles, treks }: Props) {
             </button>
             <button onClick={() => setInsightsTab('heatmap')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${insightsTab === 'heatmap' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Grid size={11} /> Weekly heatmap
+              <LayoutGrid size={11} /> Weekly heatmap
             </button>
             <button onClick={() => setInsightsTab('completeness')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${insightsTab === 'completeness' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
