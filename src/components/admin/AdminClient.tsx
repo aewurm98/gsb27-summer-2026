@@ -21,6 +21,8 @@ export function AdminClient({ profiles, treks }: Props) {
   const [tab, setTab] = useState<'classmates' | 'treks' | 'insights' | 'profiles'>('classmates')
   const [insightsTab, setInsightsTab] = useState<'destinations' | 'heatmap' | 'completeness'>('destinations')
   const [search, setSearch] = useState('')
+  const [completenessSort, setCompletenessSort] = useState<'asc' | 'desc' | 'alpha'>('asc')
+  const [heatmapCitySort, setHeatmapCitySort] = useState<'count' | 'alpha'>('count')
   const router = useRouter()
   const supabase = createClient()
 
@@ -148,17 +150,18 @@ export function AdminClient({ profiles, treks }: Props) {
 
   const weeks = getSummerWeeks()
 
-  // Top 10 cities by total presence (for heatmap columns)
+  // Top cities by total presence (for heatmap columns), optionally sorted alpha
   const topCities = useMemo(() => {
     const cityCount = new Map<string, number>()
     profiles.forEach(p =>
       p.locations?.forEach(l => cityCount.set(l.city, (cityCount.get(l.city) ?? 0) + 1))
     )
-    return Array.from(cityCount.entries())
+    const byCount = Array.from(cityCount.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([city]) => city)
-  }, [profiles])
+    return heatmapCitySort === 'alpha' ? [...byCount].sort() : byCount
+  }, [profiles, heatmapCitySort])
 
   // Weekly density matrix: weeks × cities
   const weekCityMatrix = useMemo(() =>
@@ -193,6 +196,24 @@ export function AdminClient({ profiles, treks }: Props) {
       return { profile: p, score }
     }).sort((a, b) => a.score - b.score)
   , [sortedProfiles])
+
+  const sortedCompleteness = useMemo(() => {
+    if (completenessSort === 'desc') return [...completenessScores].reverse()
+    if (completenessSort === 'alpha') return [...completenessScores].sort((a, b) => a.profile.full_name.localeCompare(b.profile.full_name))
+    return completenessScores // 'asc' is the default sort
+  }, [completenessScores, completenessSort])
+
+  const completenessStats = useMemo(() => {
+    const total = completenessScores.length
+    return {
+      total,
+      avgScore: Math.round(completenessScores.reduce((s, x) => s + x.score, 0) / Math.max(1, total)),
+      withPhoto: completenessScores.filter(s => !!s.profile.photo_url).length,
+      withLocations: completenessScores.filter(s => (s.profile.locations?.length ?? 0) > 0).length,
+      withInterests: completenessScores.filter(s => (s.profile.travel_interests?.length ?? 0) > 0).length,
+      withTags: completenessScores.filter(s => (s.profile.activity_tags?.length ?? 0) > 0).length,
+    }
+  }, [completenessScores])
 
   return (
     <div className="space-y-6">
@@ -569,7 +590,20 @@ export function AdminClient({ profiles, treks }: Props) {
           {/* Weekly heatmap */}
           {insightsTab === 'heatmap' && (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground flex items-center gap-2"><BarChart2 size={14} /> Classmates per city per week — top {topCities.length} cities</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <BarChart2 size={14} /> Classmates per city per week — top {topCities.length} cities
+                </p>
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground mr-1">Sort cities:</span>
+                  {(['count', 'alpha'] as const).map(s => (
+                    <button key={s} onClick={() => setHeatmapCitySort(s)}
+                      className={`px-2.5 py-1 rounded-lg border transition ${heatmapCitySort === s ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent'}`}>
+                      {s === 'count' ? 'By count' : 'A–Z'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {topCities.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-12">No location data yet.</p>
               ) : (
@@ -581,33 +615,40 @@ export function AdminClient({ profiles, treks }: Props) {
                         {topCities.map(city => (
                           <th key={city} className="px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">{city}</th>
                         ))}
+                        <th className="px-3 py-2.5 font-medium text-muted-foreground text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {weekCityMatrix.map(row => (
-                        <tr key={row.label} className="hover:bg-accent/30 transition-colors">
-                          <td className="px-3 py-2 font-medium whitespace-nowrap sticky left-0 bg-card z-10">
-                            {row.label} <span className="text-muted-foreground font-normal">({row.dateLabel})</span>
-                          </td>
-                          {row.cities.map(({ city, count }) => (
-                            <td key={city} className="px-3 py-2 text-center">
-                              {count > 0 ? (
-                                <span
-                                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold"
-                                  style={{
-                                    backgroundColor: `rgba(var(--primary-rgb, 99,102,241), ${Math.max(0.12, count / maxDensity * 0.85)})`,
-                                    color: count / maxDensity > 0.5 ? 'white' : 'inherit',
-                                  }}
-                                >
-                                  {count}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/30">·</span>
-                              )}
+                      {weekCityMatrix.map(row => {
+                        const rowTotal = row.cities.reduce((s, c) => s + c.count, 0)
+                        return (
+                          <tr key={row.label} className="hover:bg-accent/30 transition-colors">
+                            <td className="px-3 py-2 font-medium whitespace-nowrap sticky left-0 bg-card z-10">
+                              {row.label} <span className="text-muted-foreground font-normal">({row.dateLabel})</span>
                             </td>
-                          ))}
-                        </tr>
-                      ))}
+                            {row.cities.map(({ city, count }) => (
+                              <td key={city} className="px-3 py-2 text-center">
+                                {count > 0 ? (
+                                  <span
+                                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold"
+                                    style={{
+                                      backgroundColor: `rgba(140,21,21,${Math.max(0.1, count / maxDensity * 0.82)})`,
+                                      color: count / maxDensity > 0.45 ? 'white' : '#8C1515',
+                                    }}
+                                  >
+                                    {count}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/30">·</span>
+                                )}
+                              </td>
+                            ))}
+                            <td className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                              {rowTotal > 0 ? rowTotal : '·'}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -617,26 +658,51 @@ export function AdminClient({ profiles, treks }: Props) {
 
           {/* Data completeness */}
           {insightsTab === 'completeness' && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Profile completeness — sorted ascending (least complete first)</p>
+            <div className="space-y-4">
+              {/* Summary stats */}
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { label: 'Avg completeness', value: `${completenessStats.avgScore}%` },
+                  { label: 'Have photo', value: `${completenessStats.withPhoto} / ${completenessStats.total}` },
+                  { label: 'Have locations', value: `${completenessStats.withLocations} / ${completenessStats.total}` },
+                  { label: 'Have interests', value: `${completenessStats.withInterests} / ${completenessStats.total}` },
+                ].map(stat => (
+                  <div key={stat.label} className="rounded-xl border border-border bg-card p-3">
+                    <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
+                    <div className="text-lg font-bold">{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Sort controls */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Sort by:</span>
+                {([['asc', 'Score ↑'], ['desc', 'Score ↓'], ['alpha', 'Name A–Z']] as const).map(([val, lbl]) => (
+                  <button key={val} onClick={() => setCompletenessSort(val)}
+                    className={`px-2.5 py-1 rounded-lg border text-xs transition ${completenessSort === val ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent'}`}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+
               <div className="rounded-2xl border border-border overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      {['Name', 'Score', 'Details'].map(h => (
+                      {['Name', 'Score', 'Missing'].map(h => (
                         <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {completenessScores.map(({ profile: p, score }) => (
+                    {sortedCompleteness.map(({ profile: p, score }) => (
                       <tr key={p.id} className="hover:bg-accent/50 transition-colors">
                         <td className="px-4 py-3 font-medium">
                           <Link href={`/profile/${p.id}`} className="hover:text-primary transition-colors">{p.full_name}</Link>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                            <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-400' : 'bg-rose-400'}`}
                                 style={{ width: `${score}%` }}
@@ -647,9 +713,9 @@ export function AdminClient({ profiles, treks }: Props) {
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           <div className="flex flex-wrap gap-1">
-                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400">no photo</span>}
-                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400">no locations</span>}
-                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">no interests</span>}
+                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800">no photo</span>}
+                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded border border-orange-200 bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800">no locations</span>}
+                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">no interests</span>}
                             {!p.section && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">no hometown</span>}
                             {!(p.activity_tags?.length) && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">no tags</span>}
                           </div>

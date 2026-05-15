@@ -184,12 +184,26 @@ export function getInitials(name: string): string {
     .toUpperCase()
 }
 
-export function avatarColor(name: string): string {
-  const colors = [
-    'bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
-    'bg-rose-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500',
-  ]
+const AVATAR_COLORS_TW = [
+  'bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
+  'bg-rose-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500',
+]
+const AVATAR_COLORS_HEX = [
+  '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b',
+  '#f43f5e', '#6366f1', '#14b8a6', '#f97316',
+]
+
+function nameHash(name: string): number {
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return colors[Math.abs(hash) % colors.length]
+  return Math.abs(hash)
+}
+
+export function avatarColor(name: string): string {
+  return AVATAR_COLORS_TW[nameHash(name) % AVATAR_COLORS_TW.length]
+}
+
+/** Same palette as avatarColor, but returns a hex string for use in inline styles */
+export function avatarColorHex(name: string): string {
+  return AVATAR_COLORS_HEX[nameHash(name) % AVATAR_COLORS_HEX.length]
 }

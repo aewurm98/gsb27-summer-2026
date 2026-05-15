@@ -15,7 +15,7 @@ function MatchBall({ score }: { score: number }) {
   const circ = 2 * Math.PI * r
   const fill = (score / 100) * circ
   const color = score >= 70 ? '#16a34a' : score >= 45 ? '#ca8a04' : '#ea580c'
-  const label = score >= 70 ? 'Strong' : score >= 45 ? 'Good' : 'Some'
+  const label = score >= 70 ? 'Strong match' : score >= 45 ? 'Good match' : 'Some match'
   return (
     <span className="flex items-center gap-1 shrink-0">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
@@ -253,12 +253,12 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
                   )}
                   <div className="flex gap-1 mt-1">
                     {profile.can_host && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-700">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-400 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-600">
                         🏠 Host
                       </span>
                     )}
                     {profile.open_to_visit && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-sky-50 text-sky-800 border-sky-300 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-700">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-sky-100 text-sky-800 border-sky-400 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-600">
                         ✈️ Visitor
                       </span>
                     )}

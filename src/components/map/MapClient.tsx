@@ -5,8 +5,8 @@ import Image from 'next/image'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
-import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight } from 'lucide-react'
+import { getSummerWeeks, getLocationAtWeek, avatarColor, avatarColorHex, getInitials } from '@/lib/utils'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, Maximize2 } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
@@ -26,6 +26,9 @@ interface OffScreenIndicator extends CityGroup {
   screenY: number
   angleDeg: number
 }
+
+const INITIAL_CENTER: [number, number] = [-100, 40]
+const INITIAL_ZOOM = 3.5
 
 /** Compute where the ray from (cx,cy) toward (px,py) intersects the padded map rectangle */
 function getEdgePoint(
@@ -48,6 +51,60 @@ function getEdgePoint(
   }
 }
 
+/** Spread overlapping edge indicators so they don't pile on top of each other */
+function resolveIndicatorCollisions(
+  indicators: OffScreenIndicator[],
+  w: number, h: number, PAD: number
+): OffScreenIndicator[] {
+  const MIN_GAP = 92 // minimum px between pill centres
+  const classify = (ind: OffScreenIndicator): 'top' | 'bottom' | 'left' | 'right' => {
+    const dT = Math.abs(ind.screenY - PAD)
+    const dB = Math.abs(ind.screenY - (h - PAD))
+    const dL = Math.abs(ind.screenX - PAD)
+    const dR = Math.abs(ind.screenX - (w - PAD))
+    const min = Math.min(dT, dB, dL, dR)
+    if (min === dT) return 'top'
+    if (min === dB) return 'bottom'
+    if (min === dL) return 'left'
+    return 'right'
+  }
+
+  const groups: Record<'top' | 'bottom' | 'left' | 'right', OffScreenIndicator[]> = {
+    top: [], bottom: [], left: [], right: [],
+  }
+  indicators.forEach(ind => groups[classify(ind)].push(ind))
+
+  function spread(
+    items: OffScreenIndicator[],
+    key: 'screenX' | 'screenY',
+    lo: number, hi: number
+  ): OffScreenIndicator[] {
+    if (items.length <= 1) return items
+    const sorted = [...items].sort((a, b) => a[key] - b[key])
+    // forward pass — push items apart
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i][key] - sorted[i - 1][key] < MIN_GAP) {
+        sorted[i] = { ...sorted[i], [key]: sorted[i - 1][key] + MIN_GAP }
+      }
+    }
+    // backward pass — keep within bounds
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i][key] > hi) sorted[i] = { ...sorted[i], [key]: hi }
+      if (i > 0 && sorted[i][key] - sorted[i - 1][key] < MIN_GAP) {
+        sorted[i - 1] = { ...sorted[i - 1], [key]: sorted[i][key] - MIN_GAP }
+      }
+    }
+    return sorted
+  }
+
+  return [
+    ...spread(groups.top,    'screenX', PAD, w - PAD),
+    ...spread(groups.bottom, 'screenX', PAD, w - PAD),
+    ...spread(groups.left,   'screenY', PAD, h - PAD),
+    ...spread(groups.right,  'screenY', PAD, h - PAD),
+  ]
+}
+
 export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
@@ -65,8 +122,10 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const [mapBounds, setMapBounds] = useState<mapboxgl.LngLatBounds | null>(null)
   const [offScreen, setOffScreen] = useState<OffScreenIndicator[]>([])
 
+  // Zoom level for adaptive markers
+  const [zoomLevel, setZoomLevel] = useState(INITIAL_ZOOM)
+
   // Group all profiles by city name (case-insensitive) for the current week
-  // Key on city only — not lat/lng — so seed vs. user-entered coords don't split a city
   const cityGroups = useMemo((): CityGroup[] => {
     const cityMap = new Map<string, CityGroup>()
     profiles.forEach(profile => {
@@ -96,21 +155,22 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/light-v11',
-      center: [-100, 40],
-      zoom: 3.5,
+      center: INITIAL_CENTER,
+      zoom: INITIAL_ZOOM,
       attributionControl: false,
     })
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     map.current.on('load', () => setMapLoaded(true))
   }, [])
 
-  // ── Track viewport for off-screen indicators ────────────────────────────────
+  // ── Track viewport + zoom for off-screen indicators ─────────────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current) return
     const update = () => {
       if (!map.current || !mapContainer.current) return
       setMapBounds(map.current.getBounds() ?? null)
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
+      setZoomLevel(map.current.getZoom())
     }
     update()
     map.current.on('moveend', update)
@@ -124,9 +184,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   // ── Compute off-screen edge indicators ─────────────────────────────────────
   useEffect(() => {
     if (!map.current || !mapBounds || mapSize.w === 0) { setOffScreen([]); return }
-    const PAD = 52
+    const PAD = 56
     const cx = mapSize.w / 2, cy = mapSize.h / 2
-    const indicators: OffScreenIndicator[] = []
+    const raw: OffScreenIndicator[] = []
 
     for (const group of cityGroups) {
       try {
@@ -134,12 +194,13 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         const proj = map.current.project([group.lng, group.lat])
         const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
         const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
-        indicators.push({ ...group, screenX: x, screenY: y, angleDeg })
+        raw.push({ ...group, screenX: x, screenY: y, angleDeg })
       } catch { /* skip if projection fails during map init */ }
     }
 
-    indicators.sort((a, b) => b.profiles.length - a.profiles.length)
-    setOffScreen(indicators.slice(0, 8))
+    raw.sort((a, b) => b.profiles.length - a.profiles.length)
+    const capped = raw.slice(0, 8)
+    setOffScreen(resolveIndicatorCollisions(capped, mapSize.w, mapSize.h, PAD))
   }, [cityGroups, mapBounds, mapSize])
 
   // ── Render markers ──────────────────────────────────────────────────────────
@@ -148,34 +209,72 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
 
+    const isSplit = zoomLevel >= 9
+
     cityGroups.forEach(group => {
-      const count = group.profiles.length
-      const size = Math.max(36, 28 + count * 4)
+      if (isSplit) {
+        // ── Individual avatar markers at high zoom ───────────────────────────
+        const n = group.profiles.length
+        group.profiles.forEach((profile, idx) => {
+          const angle = n === 1 ? -Math.PI / 2 : (idx / n) * 2 * Math.PI - Math.PI / 2
+          const r = n === 1 ? 0 : Math.min(44, 16 + n * 3)
+          const offset: [number, number] = [Math.cos(angle) * r, Math.sin(angle) * r]
 
-      const el = document.createElement('div')
-      el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;`
+          const el = document.createElement('div')
+          el.style.cssText = `width:34px;height:34px;cursor:pointer;`
 
-      const inner = document.createElement('div')
-      inner.style.cssText = `
-        width:${size}px;height:${size}px;border-radius:50%;
-        background:var(--primary,#8C1515);border:3px solid white;
-        box-shadow:0 2px 12px rgba(140,21,21,0.4);
-        display:flex;align-items:center;justify-content:center;
-        color:white;font-weight:700;font-size:${count > 9 ? 11 : 12}px;
-        transition:transform 0.15s ease,box-shadow 0.15s ease;
-      `
-      inner.textContent = count === 1 ? getInitials(group.profiles[0].full_name) : String(count)
-      el.appendChild(inner)
+          const inner = document.createElement('div')
+          inner.style.cssText = `
+            width:34px;height:34px;border-radius:50%;
+            background:${avatarColorHex(profile.full_name)};
+            border:2.5px solid white;
+            box-shadow:0 2px 8px rgba(0,0,0,0.18);
+            display:flex;align-items:center;justify-content:center;
+            color:white;font-weight:700;font-size:11px;
+            transition:transform 0.15s ease,box-shadow 0.15s ease;
+          `
+          inner.textContent = getInitials(profile.full_name)
+          inner.title = profile.full_name
+          el.appendChild(inner)
 
-      el.onmouseenter = () => { inner.style.transform = 'scale(1.2)'; inner.style.boxShadow = '0 4px 18px rgba(140,21,21,0.55)' }
-      el.onmouseleave = () => { inner.style.transform = 'scale(1)'; inner.style.boxShadow = '0 2px 12px rgba(140,21,21,0.4)' }
-      el.onclick = () => setSelectedCity(group)
+          el.onmouseenter = () => { inner.style.transform = 'scale(1.2)'; inner.style.boxShadow = '0 4px 14px rgba(0,0,0,0.28)' }
+          el.onmouseleave = () => { inner.style.transform = 'scale(1)'; inner.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)' }
+          el.onclick = () => { window.location.href = `/profile/${profile.id}` }
 
-      markersRef.current.push(
-        new mapboxgl.Marker({ element: el }).setLngLat([group.lng, group.lat]).addTo(map.current!)
-      )
+          markersRef.current.push(
+            new mapboxgl.Marker({ element: el, offset }).setLngLat([group.lng, group.lat]).addTo(map.current!)
+          )
+        })
+      } else {
+        // ── Cluster bubble marker ────────────────────────────────────────────
+        const count = group.profiles.length
+        const size = Math.max(36, 28 + count * 4)
+
+        const el = document.createElement('div')
+        el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;`
+
+        const inner = document.createElement('div')
+        inner.style.cssText = `
+          width:${size}px;height:${size}px;border-radius:50%;
+          background:var(--primary,#8C1515);border:3px solid white;
+          box-shadow:0 2px 12px rgba(140,21,21,0.4);
+          display:flex;align-items:center;justify-content:center;
+          color:white;font-weight:700;font-size:${count > 9 ? 11 : 12}px;
+          transition:transform 0.15s ease,box-shadow 0.15s ease;
+        `
+        inner.textContent = count === 1 ? getInitials(group.profiles[0].full_name) : String(count)
+        el.appendChild(inner)
+
+        el.onmouseenter = () => { inner.style.transform = 'scale(1.2)'; inner.style.boxShadow = '0 4px 18px rgba(140,21,21,0.55)' }
+        el.onmouseleave = () => { inner.style.transform = 'scale(1)'; inner.style.boxShadow = '0 2px 12px rgba(140,21,21,0.4)' }
+        el.onclick = () => setSelectedCity(group)
+
+        markersRef.current.push(
+          new mapboxgl.Marker({ element: el }).setLngLat([group.lng, group.lat]).addTo(map.current!)
+        )
+      }
     })
-  }, [cityGroups])
+  }, [cityGroups, zoomLevel])
 
   // ── Playback ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -315,8 +414,20 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </div>
       )}
 
-      <div className="absolute top-4 left-4 rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
-        Click a marker to see classmates · Drag to explore
+      {/* ── Hint + reset button ─────────────────────────────────────────── */}
+      <div className="absolute top-4 left-4 flex items-center gap-2">
+        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
+          {zoomLevel >= 9
+            ? 'Click a person to view profile · Zoom out to group'
+            : 'Click a marker to see classmates · Drag to explore'}
+        </div>
+        <button
+          onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}
+          className="rounded-xl border border-border bg-card/90 backdrop-blur-sm p-2 text-muted-foreground hover:text-foreground hover:bg-card transition"
+          title="Reset view"
+        >
+          <Maximize2 size={13} />
+        </button>
       </div>
     </div>
   )

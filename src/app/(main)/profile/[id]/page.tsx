@@ -39,12 +39,12 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
           )}
           <div className="flex flex-wrap gap-2 mt-2">
             {profile.can_host && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-700">
+              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-400 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-600">
                 <Home size={10} /> Available to host
               </span>
             )}
             {profile.open_to_visit && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-sky-50 text-sky-800 border-sky-300 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-700">
+              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-sky-100 text-sky-800 border-sky-400 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-600">
                 <Plane size={10} /> Open to visit
               </span>
             )}
