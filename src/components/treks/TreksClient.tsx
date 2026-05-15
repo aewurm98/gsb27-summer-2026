@@ -5,10 +5,31 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trek, TrekInterest, Profile } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane } from 'lucide-react'
+import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign } from 'lucide-react'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import type { SuggestedDestination } from '@/app/(main)/treks/page'
+
+const ACTIVITY_TAGS = [
+  'hiking', 'surfing', 'skiing', 'cycling', 'running', 'yoga',
+  'food & wine', 'nightlife', 'art & culture', 'history', 'beaches',
+  'mountains', 'cities', 'road trips', 'backpacking', 'luxury',
+] as const
+
+const COST_TIERS = ['budget', 'moderate', 'premium'] as const
+
+function CostIcon({ tier }: { tier: string | null }) {
+  if (!tier) return null
+  const count = tier === 'budget' ? 1 : tier === 'moderate' ? 2 : 3
+  return (
+    <span className="flex items-center gap-0.5 text-xs text-muted-foreground" title={`Cost: ${tier}`}>
+      {Array.from({ length: count }).map((_, i) => (
+        <DollarSign key={i} size={9} className="text-amber-500" />
+      ))}
+    </span>
+  )
+}
 
 type FullTrek = Trek & {
   trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name' | 'photo_url'> | undefined })[]
@@ -18,9 +39,10 @@ interface Props {
   treks: FullTrek[]
   myProfileId: string | null
   isAdmin: boolean
+  suggestedDestinations: SuggestedDestination[]
 }
 
-export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props) {
+export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggestedDestinations }: Props) {
   const [treks, setTreks] = useState(initialTreks)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -36,7 +58,30 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
     proposed_start: '',
     proposed_end: '',
     description: '',
+    activity_tags: new Set<string>(),
+    cost_tier: '' as string,
+    max_group_size: '' as string,
   })
+
+  function toggleNewTag(tag: string) {
+    setNewTrek(prev => {
+      const next = new Set(prev.activity_tags)
+      next.has(tag) ? next.delete(tag) : next.add(tag)
+      return { ...prev, activity_tags: next }
+    })
+  }
+
+  function prefillFromSuggestion(dest: SuggestedDestination) {
+    setNewTrek(prev => ({
+      ...prev,
+      title: `${dest.city} Trek`,
+      destination_city: dest.city,
+      destination_country: dest.country,
+      destination_lat: dest.lat,
+      destination_lng: dest.lng,
+    }))
+    setShowCreateForm(true)
+  }
 
   async function handleInterest(trekId: string, status: 'interested' | 'declined') {
     if (!myProfileId) return
@@ -59,13 +104,25 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
     setCreating(true)
     try {
       await supabase.from('treks').insert({
-        ...newTrek,
-        created_by: myProfileId,
+        title: newTrek.title,
+        destination_city: newTrek.destination_city,
+        destination_country: newTrek.destination_country,
+        destination_lat: newTrek.destination_lat,
+        destination_lng: newTrek.destination_lng,
         proposed_start: newTrek.proposed_start || null,
         proposed_end: newTrek.proposed_end || null,
+        description: newTrek.description || null,
+        activity_tags: Array.from(newTrek.activity_tags),
+        cost_tier: newTrek.cost_tier || null,
+        max_group_size: newTrek.max_group_size ? Number(newTrek.max_group_size) : null,
+        created_by: myProfileId,
       })
       setShowCreateForm(false)
-      setNewTrek({ title: '', destination_city: '', destination_country: 'United States', destination_lat: null, destination_lng: null, proposed_start: '', proposed_end: '', description: '' })
+      setNewTrek({
+        title: '', destination_city: '', destination_country: 'United States',
+        destination_lat: null, destination_lng: null, proposed_start: '', proposed_end: '',
+        description: '', activity_tags: new Set(), cost_tier: '', max_group_size: '',
+      })
       router.refresh()
     } finally {
       setCreating(false)
@@ -122,6 +179,36 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
               <input type="date" value={newTrek.proposed_end} onChange={e => setNewTrek(p => ({ ...p, proposed_end: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Cost tier</label>
+              <select value={newTrek.cost_tier} onChange={e => setNewTrek(p => ({ ...p, cost_tier: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                <option value="">— select —</option>
+                {COST_TIERS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Max group size</label>
+              <input type="number" min={2} max={50} value={newTrek.max_group_size}
+                onChange={e => setNewTrek(p => ({ ...p, max_group_size: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g. 12" />
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Activity tags</label>
+              <div className="flex flex-wrap gap-1.5">
+                {ACTIVITY_TAGS.map(tag => (
+                  <button key={tag} type="button" onClick={() => toggleNewTag(tag)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                      newTrek.activity_tags.has(tag)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                    }`}>
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="sm:col-span-2 space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Description</label>
               <textarea
@@ -145,6 +232,60 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
               {creating ? <Loader2 size={14} className="animate-spin" /> : null}
               Create trek
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Suggested treks (destinations with 3+ interested classmates, not yet a trek) */}
+      {suggestedDestinations.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} className="text-primary" />
+            <h2 className="text-sm font-semibold">Suggested by classmate interest</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {suggestedDestinations.map(dest => (
+              <div key={dest.city} className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-sm">{dest.city}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Users size={10} />
+                      {dest.interestedProfiles.length} classmates interested
+                    </p>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      onClick={() => prefillFromSuggestion(dest)}
+                      className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
+                    >
+                      <Plus size={11} /> Create trek
+                    </button>
+                  )}
+                </div>
+                {/* Avatar stack */}
+                <div className="flex items-center gap-2 mt-3">
+                  <div className="flex -space-x-2">
+                    {dest.interestedProfiles.slice(0, 5).map(p => (
+                      <div
+                        key={p.id}
+                        className={`relative w-6 h-6 rounded-full border-2 border-card overflow-hidden flex items-center justify-center text-white text-xs font-semibold ${avatarColor(p.full_name)}`}
+                        title={p.full_name}
+                      >
+                        {p.photo_url
+                          ? <Image src={p.photo_url} alt={p.full_name} fill className="object-cover" unoptimized />
+                          : getInitials(p.full_name)
+                        }
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {dest.interestedProfiles.slice(0, 2).map(p => p.full_name.split(' ')[0]).join(', ')}
+                    {dest.interestedProfiles.length > 2 ? ` +${dest.interestedProfiles.length - 2}` : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -196,10 +337,22 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin }: Props
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Users size={10} />
                         {interested.length} interested{confirmed.length > 0 ? `, ${confirmed.length} confirmed` : ''}
+                        {trek.max_group_size ? ` · max ${trek.max_group_size}` : ''}
                       </span>
+                      {trek.cost_tier && <CostIcon tier={trek.cost_tier} />}
                     </div>
                     {trek.description && (
                       <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{trek.description}</p>
+                    )}
+                    {/* Activity tags */}
+                    {trek.activity_tags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-3">
+                        {trek.activity_tags.map(tag => (
+                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
 

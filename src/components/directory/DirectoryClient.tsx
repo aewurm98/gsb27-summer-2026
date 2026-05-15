@@ -5,20 +5,23 @@ import Image from 'next/image'
 import Link from 'next/link'
 import Fuse from 'fuse.js'
 import { Profile, Location, TravelInterest } from '@/lib/types'
-import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek } from '@/lib/utils'
-import { Search, MapPin, SlidersHorizontal, X } from 'lucide-react'
+import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek, getMatchScore } from '@/lib/utils'
+import { Search, MapPin, SlidersHorizontal, X, Sparkles, ArrowUpDown } from 'lucide-react'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
 
 interface Props {
   profiles: FullProfile[]
   myProfileId: string | null
+  myProfile: FullProfile | null
 }
 
-export function DirectoryClient({ profiles, myProfileId }: Props) {
+export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
   const [search, setSearch] = useState('')
   const [cityFilter, setCityFilter] = useState<string>('')
   const [weekFilter, setWeekFilter] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<'match' | 'alpha'>('match')
+  const [tagFilters, setTagFilters] = useState<Set<string>>(new Set())
 
   const weeks = getSummerWeeks()
 
@@ -28,15 +31,32 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
     return Array.from(set).sort()
   }, [profiles])
 
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    profiles.forEach(p => (p.activity_tags ?? []).forEach(t => set.add(t)))
+    return Array.from(set).sort()
+  }, [profiles])
+
   const fuse = useMemo(() => new Fuse(profiles, {
     keys: ['full_name', 'section', 'additional_details'],
     threshold: 0.35,
   }), [profiles])
 
+  // Pre-compute match scores for all profiles (excluding self)
+  const matchScores = useMemo(() => {
+    if (!myProfile) return new Map<string, { score: number; reasons: string[] }>()
+    const map = new Map<string, { score: number; reasons: string[] }>()
+    for (const p of profiles) {
+      if (p.id === myProfile.id) continue
+      map.set(p.id, getMatchScore(myProfile, p))
+    }
+    return map
+  }, [myProfile, profiles])
+
   const filtered = useMemo(() => {
     let results = search
       ? fuse.search(search).map(r => r.item)
-      : profiles
+      : [...profiles]
 
     if (cityFilter) {
       results = results.filter(p =>
@@ -53,20 +73,48 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
       })
     }
 
+    if (tagFilters.size > 0) {
+      results = results.filter(p =>
+        (p.activity_tags ?? []).some(t => tagFilters.has(t))
+      )
+    }
+
+    // Sort
+    if (sortBy === 'match' && myProfile) {
+      results = results.slice().sort((a, b) => {
+        if (a.id === myProfile.id) return -1
+        if (b.id === myProfile.id) return 1
+        const sa = matchScores.get(a.id)?.score ?? 0
+        const sb = matchScores.get(b.id)?.score ?? 0
+        return sb - sa
+      })
+    } else {
+      results = results.slice().sort((a, b) => a.full_name.localeCompare(b.full_name))
+    }
+
     return results
-  }, [search, cityFilter, weekFilter, fuse, profiles])
+  }, [search, cityFilter, weekFilter, tagFilters, sortBy, fuse, profiles, myProfile, matchScores])
 
   function clearFilters() {
     setSearch('')
     setCityFilter('')
     setWeekFilter(null)
+    setTagFilters(new Set())
   }
 
-  const hasFilters = search || cityFilter || weekFilter !== null
+  function toggleTag(tag: string) {
+    setTagFilters(prev => {
+      const next = new Set(prev)
+      next.has(tag) ? next.delete(tag) : next.add(tag)
+      return next
+    })
+  }
+
+  const hasFilters = search || cityFilter || weekFilter !== null || tagFilters.size > 0
 
   return (
-    <div className="space-y-6">
-      {/* Filters */}
+    <div className="space-y-5">
+      {/* Primary filters row */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-56">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -100,6 +148,20 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
           ))}
         </select>
 
+        {/* Sort toggle */}
+        <button
+          onClick={() => setSortBy(s => s === 'match' ? 'alpha' : 'match')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm transition ${
+            sortBy === 'match'
+              ? 'border-primary/50 bg-primary/5 text-primary'
+              : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent'
+          }`}
+          title={sortBy === 'match' ? 'Sorted by best match — click for A–Z' : 'Sorted A–Z — click for best match'}
+        >
+          {sortBy === 'match' ? <Sparkles size={13} /> : <ArrowUpDown size={13} />}
+          {sortBy === 'match' ? 'Best match' : 'A–Z'}
+        </button>
+
         {hasFilters && (
           <button
             onClick={clearFilters}
@@ -110,8 +172,28 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
         )}
       </div>
 
+      {/* Activity tag pills */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              onClick={() => toggleTag(tag)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                tagFilters.has(tag)
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
         Showing {filtered.length} of {profiles.length} classmates
+        {myProfile && sortBy === 'match' && ' · sorted by match'}
       </p>
 
       {/* Grid */}
@@ -120,6 +202,7 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
           const locations = (profile.locations ?? []).sort((a, b) => a.sort_order - b.sort_order)
           const weekLocation = weekFilter !== null ? getLocationAtWeek(locations, weekFilter) : null
           const displayLocation = weekLocation ?? locations[0]
+          const match = myProfile && profile.id !== myProfileId ? matchScores.get(profile.id) : null
 
           return (
             <Link
@@ -135,10 +218,17 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
-                    {profile.full_name}
-                    {profile.id === myProfileId && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(you)</span>}
-                  </p>
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                      {profile.full_name}
+                      {profile.id === myProfileId && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(you)</span>}
+                    </p>
+                    {match && match.score > 0 && (
+                      <span className="shrink-0 flex items-center gap-0.5 text-xs font-semibold text-primary">
+                        <Sparkles size={10} />{match.score}
+                      </span>
+                    )}
+                  </div>
                   {profile.section && (
                     <p className="text-xs text-muted-foreground truncate mt-0.5">{profile.section}</p>
                   )}
@@ -181,8 +271,19 @@ export function DirectoryClient({ profiles, myProfileId }: Props) {
                 <p className="text-xs text-muted-foreground italic">No locations added yet</p>
               )}
 
-              {/* Interest tags */}
-              {profile.travel_interests?.length > 0 && (
+              {/* Match reasons */}
+              {match && match.reasons.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2.5">
+                  {match.reasons.slice(0, 2).map((r, i) => (
+                    <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-primary/8 text-primary border border-primary/20">
+                      {r}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Interest tags (only when no match reasons) */}
+              {(!match || match.reasons.length === 0) && profile.travel_interests?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-3">
                   {profile.travel_interests.slice(0, 3).map(t => (
                     <span key={t.id} className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground">

@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Profile, Location, TravelInterest, Trek, TrekInterest } from '@/lib/types'
-import { formatDateRange } from '@/lib/utils'
-import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus } from 'lucide-react'
+import { formatDateRange, getSummerWeeks, getLocationAtWeek } from '@/lib/utils'
+import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus, BarChart2, Grid, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
@@ -19,6 +19,7 @@ interface Props {
 
 export function AdminClient({ profiles, treks }: Props) {
   const [tab, setTab] = useState<'classmates' | 'treks' | 'insights' | 'profiles'>('classmates')
+  const [insightsTab, setInsightsTab] = useState<'destinations' | 'heatmap' | 'completeness'>('destinations')
   const [search, setSearch] = useState('')
   const router = useRouter()
   const supabase = createClient()
@@ -142,6 +143,56 @@ export function AdminClient({ profiles, treks }: Props) {
   }, [profiles])
 
   const sortedProfiles = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name))
+
+  // ─── Phase 4 Analytics ────────────────────────────────────────────────────
+
+  const weeks = getSummerWeeks()
+
+  // Top 10 cities by total presence (for heatmap columns)
+  const topCities = useMemo(() => {
+    const cityCount = new Map<string, number>()
+    profiles.forEach(p =>
+      p.locations?.forEach(l => cityCount.set(l.city, (cityCount.get(l.city) ?? 0) + 1))
+    )
+    return Array.from(cityCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([city]) => city)
+  }, [profiles])
+
+  // Weekly density matrix: weeks × cities
+  const weekCityMatrix = useMemo(() =>
+    weeks.map(w => ({
+      label: w.label,
+      dateLabel: w.dateLabel,
+      cities: topCities.map(city => ({
+        city,
+        count: profiles.filter(p => {
+          const loc = getLocationAtWeek(p.locations ?? [], w.index)
+          return loc?.city === city
+        }).length,
+      })),
+    }))
+  , [weeks, topCities, profiles])
+
+  const maxDensity = useMemo(() =>
+    Math.max(1, ...weekCityMatrix.flatMap(w => w.cities.map(c => c.count)))
+  , [weekCityMatrix])
+
+  // Data completeness scores
+  const completenessScores = useMemo(() =>
+    sortedProfiles.map(p => {
+      let score = 0
+      if ((p.locations?.length ?? 0) > 0) score += 30
+      if ((p.travel_interests?.length ?? 0) > 0) score += 20
+      if (p.photo_url) score += 15
+      if (p.section) score += 10
+      if (p.additional_details) score += 10
+      if (p.can_host || p.open_to_visit) score += 10
+      if ((p.activity_tags?.length ?? 0) > 0) score += 5
+      return { profile: p, score }
+    }).sort((a, b) => a.score - b.score)
+  , [sortedProfiles])
 
   return (
     <div className="space-y-6">
@@ -448,56 +499,166 @@ export function AdminClient({ profiles, treks }: Props) {
 
       {tab === 'insights' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <TrendingUp size={14} />
-            <span>Top destinations by classmate interest — potential trek candidates</span>
+          {/* Insights sub-tabs */}
+          <div className="flex gap-1 rounded-xl border border-border bg-card p-1 w-fit">
+            <button onClick={() => setInsightsTab('destinations')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${insightsTab === 'destinations' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              <TrendingUp size={11} /> Destinations
+            </button>
+            <button onClick={() => setInsightsTab('heatmap')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${insightsTab === 'heatmap' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Grid size={11} /> Weekly heatmap
+            </button>
+            <button onClick={() => setInsightsTab('completeness')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${insightsTab === 'completeness' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              <ClipboardList size={11} /> Completeness
+            </button>
           </div>
-          {trekInsights.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">
-              No travel interests submitted yet.
-            </p>
-          ) : (
-            <div className="rounded-2xl border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    {['Destination', 'Classmates interested', 'Who'].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {trekInsights.map(insight => (
-                    <tr key={`${insight.city}|${insight.country}`} className="hover:bg-accent/50 transition-colors">
-                      <td className="px-4 py-3 font-medium">
-                        {insight.city}
-                        {insight.country !== 'United States' ? `, ${insight.country}` : ''}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="h-2 rounded-full bg-primary"
-                            style={{ width: `${Math.min(100, insight.classmates.length * 10)}px` }}
-                          />
-                          <span className="text-muted-foreground">{insight.classmates.length}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {insight.classmates.slice(0, 5).map(name => (
-                            <span key={name} className="text-xs px-1.5 py-0.5 rounded-full bg-accent">
-                              {name.split(' ')[0]}
-                            </span>
+
+          {/* Destinations */}
+          {insightsTab === 'destinations' && (
+            <>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <TrendingUp size={14} />
+                <span>Top destinations by classmate interest — potential trek candidates</span>
+              </div>
+              {trekInsights.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-12">No travel interests submitted yet.</p>
+              ) : (
+                <div className="rounded-2xl border border-border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        {['Destination', 'Classmates interested', 'Who'].map(h => (
+                          <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {trekInsights.map(insight => (
+                        <tr key={`${insight.city}|${insight.country}`} className="hover:bg-accent/50 transition-colors">
+                          <td className="px-4 py-3 font-medium">
+                            {insight.city}
+                            {insight.country !== 'United States' ? `, ${insight.country}` : ''}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(120, insight.classmates.length * 12)}px` }} />
+                              <span className="text-muted-foreground">{insight.classmates.length}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {insight.classmates.slice(0, 5).map(name => (
+                                <span key={name} className="text-xs px-1.5 py-0.5 rounded-full bg-accent">{name.split(' ')[0]}</span>
+                              ))}
+                              {insight.classmates.length > 5 && (
+                                <span className="text-xs text-muted-foreground">+{insight.classmates.length - 5} more</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Weekly heatmap */}
+          {insightsTab === 'heatmap' && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground flex items-center gap-2"><BarChart2 size={14} /> Classmates per city per week — top {topCities.length} cities</p>
+              {topCities.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-12">No location data yet.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-border">
+                  <table className="text-xs min-w-max">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left font-medium text-muted-foreground sticky left-0 bg-muted/50 z-10">Week</th>
+                        {topCities.map(city => (
+                          <th key={city} className="px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">{city}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {weekCityMatrix.map(row => (
+                        <tr key={row.label} className="hover:bg-accent/30 transition-colors">
+                          <td className="px-3 py-2 font-medium whitespace-nowrap sticky left-0 bg-card z-10">
+                            {row.label} <span className="text-muted-foreground font-normal">({row.dateLabel})</span>
+                          </td>
+                          {row.cities.map(({ city, count }) => (
+                            <td key={city} className="px-3 py-2 text-center">
+                              {count > 0 ? (
+                                <span
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold"
+                                  style={{
+                                    backgroundColor: `rgba(var(--primary-rgb, 99,102,241), ${Math.max(0.12, count / maxDensity * 0.85)})`,
+                                    color: count / maxDensity > 0.5 ? 'white' : 'inherit',
+                                  }}
+                                >
+                                  {count}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/30">·</span>
+                              )}
+                            </td>
                           ))}
-                          {insight.classmates.length > 5 && (
-                            <span className="text-xs text-muted-foreground">+{insight.classmates.length - 5} more</span>
-                          )}
-                        </div>
-                      </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Data completeness */}
+          {insightsTab === 'completeness' && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Profile completeness — sorted ascending (least complete first)</p>
+              <div className="rounded-2xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      {['Name', 'Score', 'Details'].map(h => (
+                        <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {completenessScores.map(({ profile: p, score }) => (
+                      <tr key={p.id} className="hover:bg-accent/50 transition-colors">
+                        <td className="px-4 py-3 font-medium">
+                          <Link href={`/profile/${p.id}`} className="hover:text-primary transition-colors">{p.full_name}</Link>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                                style={{ width: `${score}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground w-9 text-right">{score}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap gap-1">
+                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400">no photo</span>}
+                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400">no locations</span>}
+                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">no interests</span>}
+                            {!p.section && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">no hometown</span>}
+                            {!(p.activity_tags?.length) && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">no tags</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

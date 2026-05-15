@@ -10,11 +10,13 @@ export default async function DirectoryPage() {
     .order('full_name')
 
   const { data: { user } } = await supabase.auth.getUser()
-  const { data: myProfile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('user_id', user!.id)
-    .single()
+  const { data: myProfile } = user
+    ? await supabase
+        .from('profiles')
+        .select('*, locations(*), travel_interests(*)')
+        .eq('user_id', user.id)
+        .single()
+    : { data: null }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
@@ -24,7 +26,11 @@ export default async function DirectoryPage() {
           {profiles?.length ?? 0} classmates · filter by city or week to find overlap
         </p>
       </div>
-      <DirectoryClient profiles={profiles ?? []} myProfileId={myProfile?.id ?? null} />
+      <DirectoryClient
+        profiles={profiles ?? []}
+        myProfileId={myProfile?.id ?? null}
+        myProfile={myProfile ?? null}
+      />
     </div>
   )
 }

@@ -11,6 +11,16 @@ import { useRouter } from 'next/navigation'
 
 const EXPERIENCE_LABELS = ['Summer Internship', 'Traveling', 'Visiting family/friends', 'Other'] as const
 
+const ACTIVITY_TAGS = [
+  'hiking', 'surfing', 'skiing', 'cycling', 'running', 'yoga',
+  'food & wine', 'nightlife', 'art & culture', 'history', 'beaches',
+  'mountains', 'cities', 'road trips', 'backpacking', 'luxury',
+] as const
+
+const TRIP_STYLES = ['adventure', 'cultural', 'relaxation', 'foodie', 'nightlife', 'mixed'] as const
+const GROUP_SIZE_PREFS = ['solo', 'small (2-4)', 'medium (5-10)', 'large (10+)', 'any'] as const
+const INTENT_OPTIONS = ['working remotely', 'tourism', 'visiting family', 'conference', 'open'] as const
+
 interface LocationDraft {
   id?: string
   city: string
@@ -37,6 +47,7 @@ interface InterestDraft {
   notes: string
   interest_start_date: string
   interest_end_date: string
+  intent: string
 }
 
 type AllProfile = Pick<Profile, 'id' | 'full_name'> & { locations: Location[] }
@@ -97,8 +108,24 @@ export function ProfileEditForm({
       notes: t.notes ?? '',
       interest_start_date: t.interest_start_date ?? '',
       interest_end_date: t.interest_end_date ?? '',
+      intent: t.intent ?? '',
     })) ?? []
   )
+
+  // Travel preference state
+  const [activityTags, setActivityTags] = useState<Set<string>>(
+    new Set(profile?.activity_tags ?? [])
+  )
+  const [tripStyle, setTripStyle] = useState<string>(profile?.trip_style ?? '')
+  const [groupSizePref, setGroupSizePref] = useState<string>(profile?.group_size_pref ?? '')
+
+  function toggleActivityTag(tag: string) {
+    setActivityTags(prev => {
+      const next = new Set(prev)
+      next.has(tag) ? next.delete(tag) : next.add(tag)
+      return next
+    })
+  }
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -145,7 +172,7 @@ export function ProfileEditForm({
     setInterests(prev => [...prev, {
       destination_city: '', destination_country: 'United States',
       destination_lat: null, destination_lng: null,
-      notes: '', interest_start_date: '', interest_end_date: '',
+      notes: '', interest_start_date: '', interest_end_date: '', intent: '',
     }])
   }
 
@@ -174,6 +201,9 @@ export function ProfileEditForm({
           open_to_visit: openToVisit,
           photo_url: photoUrl || null,
           has_completed_profile: true,
+          activity_tags: Array.from(activityTags),
+          trip_style: tripStyle || null,
+          group_size_pref: groupSizePref || null,
         })
         .select()
         .single()
@@ -219,6 +249,7 @@ export function ProfileEditForm({
             notes: i.notes || null,
             interest_start_date: i.interest_start_date || null,
             interest_end_date: i.interest_end_date || null,
+            intent: i.intent || null,
           }))
         )
         if (intErr) throw intErr
@@ -347,6 +378,77 @@ export function ProfileEditForm({
             className="w-4 h-4 rounded accent-primary" />
           <span className="text-sm font-medium">I&#39;m open to visiting / couch-surfing with classmates</span>
         </label>
+      </section>
+
+      {/* Travel Preferences */}
+      <section className="rounded-2xl border border-border bg-card p-6 space-y-5">
+        <div>
+          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Travel preferences</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Help classmates find their best travel match.</p>
+        </div>
+
+        {/* Activity tags */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Activities you enjoy</label>
+          <div className="flex flex-wrap gap-1.5">
+            {ACTIVITY_TAGS.map(tag => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => toggleActivityTag(tag)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                  activityTags.has(tag)
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Trip style */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Travel style</label>
+          <div className="flex flex-wrap gap-1.5">
+            {TRIP_STYLES.map(style => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setTripStyle(s => s === style ? '' : style)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border capitalize transition ${
+                  tripStyle === style
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                }`}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Group size preference */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Preferred group size</label>
+          <div className="flex flex-wrap gap-1.5">
+            {GROUP_SIZE_PREFS.map(size => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => setGroupSizePref(s => s === size ? '' : size)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                  groupSizePref === size
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                }`}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Summer Plans */}
@@ -512,12 +614,30 @@ export function ProfileEditForm({
                 })}
                 placeholder="Search destination…"
               />
-              <input
-                value={interest.notes}
-                onChange={e => updateInterest(i, { notes: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Notes (optional)"
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Intent (optional)</label>
+                  <select
+                    value={interest.intent}
+                    onChange={e => updateInterest(i, { intent: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">— select —</option>
+                    {INTENT_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Notes (optional)</label>
+                  <input
+                    value={interest.notes}
+                    onChange={e => updateInterest(i, { notes: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="e.g. late July"
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">Interested from (optional)</label>

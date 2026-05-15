@@ -11,6 +11,9 @@ export interface Profile {
   open_to_visit: boolean
   has_completed_profile: boolean
   is_admin: boolean
+  activity_tags: string[]
+  trip_style: 'adventure' | 'cultural' | 'relaxation' | 'foodie' | 'nightlife' | 'mixed' | null
+  group_size_pref: 'solo' | 'small (2-4)' | 'medium (5-10)' | 'large (10+)' | 'any' | null
   created_at: string
   updated_at: string
   locations?: Location[]
@@ -46,6 +49,7 @@ export interface TravelInterest {
   notes: string | null
   interest_start_date: string | null
   interest_end_date: string | null
+  intent: 'working remotely' | 'tourism' | 'visiting family' | 'conference' | 'open' | null
   created_at: string
 }
 
@@ -59,6 +63,9 @@ export interface Trek {
   proposed_start: string | null
   proposed_end: string | null
   description: string | null
+  activity_tags: string[]
+  cost_tier: 'budget' | 'moderate' | 'premium' | null
+  max_group_size: number | null
   created_by: string
   created_at: string
   trek_interests?: TrekInterest[]
