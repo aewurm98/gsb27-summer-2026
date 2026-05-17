@@ -713,11 +713,11 @@ export function AdminClient({ profiles, treks }: Props) {
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           <div className="flex flex-wrap gap-1">
-                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800">no photo</span>}
-                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded border border-orange-200 bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800">no locations</span>}
-                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">no interests</span>}
-                            {!p.section && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">no hometown</span>}
-                            {!(p.activity_tags?.length) && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">no tags</span>}
+                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded font-medium bg-rose-200 text-rose-900">no photo</span>}
+                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded font-medium bg-orange-200 text-orange-900">no locations</span>}
+                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded font-medium bg-amber-200 text-amber-900">no interests</span>}
+                            {!p.section && <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">no hometown</span>}
+                            {!(p.activity_tags?.length) && <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">no tags</span>}
                           </div>
                         </td>
                       </tr>

@@ -6,19 +6,26 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, avatarColorHex, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, Maximize2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, Maximize2, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
-type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url'> & {
+type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url' | 'can_host' | 'open_to_visit'> & {
   locations: Location[]
+}
+
+type ExperienceSnippet = {
+  label: string | null
+  company: string | null
+  role: string | null
+  neighborhood: string | null
 }
 
 interface CityGroup {
   city: string
   lat: number
   lng: number
-  profiles: Array<MapProfile & { currentExperience?: { label: string | null; company: string | null; role: string | null; neighborhood: string | null } }>
+  profiles: Array<MapProfile & { currentExperience?: ExperienceSnippet }>
 }
 
 interface OffScreenIndicator extends CityGroup {
@@ -27,10 +34,18 @@ interface OffScreenIndicator extends CityGroup {
   angleDeg: number
 }
 
+interface HoverCard {
+  profile: MapProfile & { currentExperience?: ExperienceSnippet }
+  x: number   // px from left of map container
+  y: number   // px from top of map container
+  above: boolean
+}
+
 const INITIAL_CENTER: [number, number] = [-100, 40]
 const INITIAL_ZOOM = 3.5
+const SPLIT_ZOOM = 9
 
-/** Compute where the ray from (cx,cy) toward (px,py) intersects the padded map rectangle */
+/** Ray from centre (cx,cy) toward (px,py) — where does it hit the padded rectangle? */
 function getEdgePoint(
   cx: number, cy: number,
   px: number, py: number,
@@ -51,12 +66,12 @@ function getEdgePoint(
   }
 }
 
-/** Spread overlapping edge indicators so they don't pile on top of each other */
+/** Spread overlapping edge pills so they don't pile up (forward + backward pass) */
 function resolveIndicatorCollisions(
   indicators: OffScreenIndicator[],
   w: number, h: number, PAD: number
 ): OffScreenIndicator[] {
-  const MIN_GAP = 92 // minimum px between pill centres
+  const MIN_GAP = 92
   const classify = (ind: OffScreenIndicator): 'top' | 'bottom' | 'left' | 'right' => {
     const dT = Math.abs(ind.screenY - PAD)
     const dB = Math.abs(ind.screenY - (h - PAD))
@@ -68,33 +83,25 @@ function resolveIndicatorCollisions(
     if (min === dL) return 'left'
     return 'right'
   }
-
   const groups: Record<'top' | 'bottom' | 'left' | 'right', OffScreenIndicator[]> = {
     top: [], bottom: [], left: [], right: [],
   }
   indicators.forEach(ind => groups[classify(ind)].push(ind))
 
   function spread(
-    items: OffScreenIndicator[],
-    key: 'screenX' | 'screenY',
-    lo: number, hi: number
+    items: OffScreenIndicator[], key: 'screenX' | 'screenY', lo: number, hi: number
   ): OffScreenIndicator[] {
     if (items.length <= 1) return items
-    const sorted = [...items].sort((a, b) => a[key] - b[key])
-    // forward pass — push items apart
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i][key] - sorted[i - 1][key] < MIN_GAP) {
-        sorted[i] = { ...sorted[i], [key]: sorted[i - 1][key] + MIN_GAP }
-      }
+    const s = [...items].sort((a, b) => a[key] - b[key])
+    for (let i = 1; i < s.length; i++) {
+      if (s[i][key] - s[i - 1][key] < MIN_GAP) s[i] = { ...s[i], [key]: s[i - 1][key] + MIN_GAP }
     }
-    // backward pass — keep within bounds
-    for (let i = sorted.length - 1; i >= 0; i--) {
-      if (sorted[i][key] > hi) sorted[i] = { ...sorted[i], [key]: hi }
-      if (i > 0 && sorted[i][key] - sorted[i - 1][key] < MIN_GAP) {
-        sorted[i - 1] = { ...sorted[i - 1], [key]: sorted[i][key] - MIN_GAP }
-      }
+    for (let i = s.length - 1; i >= 0; i--) {
+      if (s[i][key] > hi) s[i] = { ...s[i], [key]: hi }
+      if (i > 0 && s[i][key] - s[i - 1][key] < MIN_GAP)
+        s[i - 1] = { ...s[i - 1], [key]: s[i][key] - MIN_GAP }
     }
-    return sorted
+    return s
   }
 
   return [
@@ -105,10 +112,104 @@ function resolveIndicatorCollisions(
   ]
 }
 
+// ── Hover card (React overlay, not Mapbox popup) ─────────────────────────────
+function ProfileHoverCard({
+  card,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  card: HoverCard
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+}) {
+  const exp = card.profile.currentExperience
+  const expLine = exp?.neighborhood
+    || [exp?.role, exp?.company].filter(Boolean).join(' @ ')
+    || exp?.label
+    || null
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: card.x,
+        top: card.y,
+        transform: card.above
+          ? 'translate(-50%, calc(-100% - 14px))'
+          : 'translate(-50%, 14px)',
+        zIndex: 40,
+        pointerEvents: 'auto',
+      }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className="w-56 rounded-2xl border border-border bg-card shadow-2xl overflow-hidden"
+    >
+      {/* Arrow indicator */}
+      <div
+        className={`absolute left-1/2 -translate-x-1/2 w-0 h-0 ${
+          card.above ? 'bottom-0 translate-y-full' : 'top-0 -translate-y-full'
+        }`}
+        style={{
+          borderLeft: '7px solid transparent',
+          borderRight: '7px solid transparent',
+          ...(card.above
+            ? { borderTop: '7px solid hsl(var(--border))' }
+            : { borderBottom: '7px solid hsl(var(--border))' }),
+        }}
+      />
+
+      <div className="p-3.5">
+        {/* Header row */}
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className={`relative w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center text-white font-bold text-sm shrink-0 ${avatarColor(card.profile.full_name)}`}>
+            {card.profile.photo_url
+              ? <Image src={card.profile.photo_url} alt={card.profile.full_name} fill className="object-cover" unoptimized />
+              : getInitials(card.profile.full_name)
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm leading-snug truncate">{card.profile.full_name}</p>
+            {(card.profile.can_host || card.profile.open_to_visit) && (
+              <div className="flex gap-1 mt-0.5 flex-wrap">
+                {card.profile.can_host && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-emerald-500 text-white">
+                    <Home size={8} /> Host
+                  </span>
+                )}
+                {card.profile.open_to_visit && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-sky-500 text-white">
+                    <Plane size={8} /> Visitor
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Experience line */}
+        {expLine && (
+          <p className="text-xs text-muted-foreground mb-2.5 truncate">{expLine}</p>
+        )}
+
+        {/* CTA */}
+        <Link
+          href={`/profile/${card.profile.id}`}
+          className="flex items-center justify-between w-full text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+        >
+          <span>View profile</span>
+          <ArrowRight size={12} />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { weekIndex, setWeekIndex } = useMapStore()
   const [playing, setPlaying] = useState(false)
@@ -116,16 +217,14 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const [showWeekPicker, setShowWeekPicker] = useState(false)
   const weeks = getSummerWeeks()
 
-  // Off-screen indicator state
   const [mapLoaded, setMapLoaded] = useState(false)
   const [mapSize, setMapSize] = useState({ w: 0, h: 0 })
   const [mapBounds, setMapBounds] = useState<mapboxgl.LngLatBounds | null>(null)
   const [offScreen, setOffScreen] = useState<OffScreenIndicator[]>([])
-
-  // Zoom level for adaptive markers
   const [zoomLevel, setZoomLevel] = useState(INITIAL_ZOOM)
+  const [hoverCard, setHoverCard] = useState<HoverCard | null>(null)
 
-  // Group all profiles by city name (case-insensitive) for the current week
+  // Group profiles by city for the current week
   const cityGroups = useMemo((): CityGroup[] => {
     const cityMap = new Map<string, CityGroup>()
     profiles.forEach(profile => {
@@ -148,7 +247,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     return Array.from(cityMap.values())
   }, [profiles, weekIndex])
 
-  // ── Map initialisation ──────────────────────────────────────────────────────
+  // ── Map init ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainer.current || map.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
@@ -163,7 +262,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     map.current.on('load', () => setMapLoaded(true))
   }, [])
 
-  // ── Track viewport + zoom for off-screen indicators ─────────────────────────
+  // ── Track viewport + zoom; dismiss hover card on pan/zoom ────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current) return
     const update = () => {
@@ -172,16 +271,19 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
       setZoomLevel(map.current.getZoom())
     }
+    const dismiss = () => setHoverCard(null)
     update()
     map.current.on('moveend', update)
     map.current.on('zoomend', update)
+    map.current.on('movestart', dismiss)
     return () => {
       map.current?.off('moveend', update)
       map.current?.off('zoomend', update)
+      map.current?.off('movestart', dismiss)
     }
   }, [mapLoaded])
 
-  // ── Compute off-screen edge indicators ─────────────────────────────────────
+  // ── Off-screen edge indicators ───────────────────────────────────────────
   useEffect(() => {
     if (!map.current || !mapBounds || mapSize.w === 0) { setOffScreen([]); return }
     const PAD = 56
@@ -195,25 +297,26 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
         const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
         raw.push({ ...group, screenX: x, screenY: y, angleDeg })
-      } catch { /* skip if projection fails during map init */ }
+      } catch { /* skip during init */ }
     }
 
     raw.sort((a, b) => b.profiles.length - a.profiles.length)
-    const capped = raw.slice(0, 8)
-    setOffScreen(resolveIndicatorCollisions(capped, mapSize.w, mapSize.h, PAD))
+    setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD))
   }, [cityGroups, mapBounds, mapSize])
 
-  // ── Render markers ──────────────────────────────────────────────────────────
+  // ── Markers ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!map.current) return
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    setHoverCard(null)
 
-    const isSplit = zoomLevel >= 9
+    const isSplit = zoomLevel >= SPLIT_ZOOM
 
     cityGroups.forEach(group => {
       if (isSplit) {
-        // ── Individual avatar markers at high zoom ───────────────────────────
+        // Individual avatar markers
         const n = group.profiles.length
         group.profiles.forEach((profile, idx) => {
           const angle = n === 1 ? -Math.PI / 2 : (idx / n) * 2 * Math.PI - Math.PI / 2
@@ -234,19 +337,34 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
             transition:transform 0.15s ease,box-shadow 0.15s ease;
           `
           inner.textContent = getInitials(profile.full_name)
-          inner.title = profile.full_name
           el.appendChild(inner)
 
-          el.onmouseenter = () => { inner.style.transform = 'scale(1.2)'; inner.style.boxShadow = '0 4px 14px rgba(0,0,0,0.28)' }
-          el.onmouseleave = () => { inner.style.transform = 'scale(1)'; inner.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)' }
+          el.onmouseenter = () => {
+            if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+            inner.style.transform = 'scale(1.2)'
+            inner.style.boxShadow = '0 4px 14px rgba(0,0,0,0.28)'
+            if (!map.current || !mapContainer.current) return
+            const proj = map.current.project([group.lng, group.lat])
+            const x = proj.x + offset[0]
+            const y = proj.y + offset[1]
+            const above = y > 160
+            setHoverCard({ profile, x, y, above })
+          }
+          el.onmouseleave = () => {
+            inner.style.transform = 'scale(1)'
+            inner.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)'
+            hoverTimeout.current = setTimeout(() => setHoverCard(null), 160)
+          }
           el.onclick = () => { window.location.href = `/profile/${profile.id}` }
 
           markersRef.current.push(
-            new mapboxgl.Marker({ element: el, offset }).setLngLat([group.lng, group.lat]).addTo(map.current!)
+            new mapboxgl.Marker({ element: el, offset })
+              .setLngLat([group.lng, group.lat])
+              .addTo(map.current!)
           )
         })
       } else {
-        // ── Cluster bubble marker ────────────────────────────────────────────
+        // Cluster count bubble
         const count = group.profiles.length
         const size = Math.max(36, 28 + count * 4)
 
@@ -265,18 +383,30 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         inner.textContent = count === 1 ? getInitials(group.profiles[0].full_name) : String(count)
         el.appendChild(inner)
 
-        el.onmouseenter = () => { inner.style.transform = 'scale(1.2)'; inner.style.boxShadow = '0 4px 18px rgba(140,21,21,0.55)' }
-        el.onmouseleave = () => { inner.style.transform = 'scale(1)'; inner.style.boxShadow = '0 2px 12px rgba(140,21,21,0.4)' }
+        el.onmouseenter = () => {
+          inner.style.transform = 'scale(1.2)'
+          inner.style.boxShadow = '0 4px 18px rgba(140,21,21,0.55)'
+        }
+        el.onmouseleave = () => {
+          inner.style.transform = 'scale(1)'
+          inner.style.boxShadow = '0 2px 12px rgba(140,21,21,0.4)'
+        }
         el.onclick = () => setSelectedCity(group)
 
         markersRef.current.push(
-          new mapboxgl.Marker({ element: el }).setLngLat([group.lng, group.lat]).addTo(map.current!)
+          new mapboxgl.Marker({ element: el })
+            .setLngLat([group.lng, group.lat])
+            .addTo(map.current!)
         )
       }
     })
+
+    return () => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    }
   }, [cityGroups, zoomLevel])
 
-  // ── Playback ────────────────────────────────────────────────────────────────
+  // ── Playback ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!playing) return
     const interval = setInterval(() => {
@@ -292,19 +422,21 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     <div className="relative flex-1 flex">
       <div ref={mapContainer} className="flex-1" />
 
-      {/* ── Off-screen edge indicators ─────────────────────────────────── */}
+      {/* ── Off-screen edge indicators ──────────────────────────────────── */}
       {offScreen.map(ind => (
         <button
           key={ind.city}
-          onClick={() => map.current?.flyTo({ center: [ind.lng, ind.lat], zoom: Math.max((map.current?.getZoom() ?? 3), 5), duration: 1400, essential: true })}
+          onClick={() => map.current?.flyTo({
+            center: [ind.lng, ind.lat],
+            zoom: Math.max((map.current?.getZoom() ?? 3), 5),
+            duration: 1400,
+            essential: true,
+          })}
           style={{ position: 'absolute', left: ind.screenX, top: ind.screenY, transform: 'translate(-50%,-50%)' }}
           className="flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full bg-primary text-primary-foreground text-xs font-semibold shadow-lg hover:scale-110 transition-transform z-20 pointer-events-auto"
           title={`Fly to ${ind.city}`}
         >
-          <ArrowRight
-            size={11}
-            style={{ transform: `rotate(${ind.angleDeg}deg)`, flexShrink: 0 }}
-          />
+          <ArrowRight size={11} style={{ transform: `rotate(${ind.angleDeg}deg)`, flexShrink: 0 }} />
           <span className="max-w-[80px] truncate">{ind.city}</span>
           {ind.profiles.length > 1 && (
             <span className="bg-white/25 rounded-full px-1 tabular-nums">{ind.profiles.length}</span>
@@ -312,7 +444,16 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </button>
       ))}
 
-      {/* ── Week slider panel ──────────────────────────────────────────── */}
+      {/* ── Hover profile card ───────────────────────────────────────────── */}
+      {hoverCard && (
+        <ProfileHoverCard
+          card={hoverCard}
+          onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current) }}
+          onMouseLeave={() => setHoverCard(null)}
+        />
+      )}
+
+      {/* ── Week slider panel ────────────────────────────────────────────── */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
         <div className="relative rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg p-4">
           {showWeekPicker && (
@@ -375,7 +516,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </div>
       </div>
 
-      {/* ── City detail popup ──────────────────────────────────────────── */}
+      {/* ── City detail popup (cluster mode) ────────────────────────────── */}
       {selectedCity && (
         <div className="absolute top-4 right-4 w-72 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-10">
           <div className="p-4 border-b border-border flex items-center justify-between">
@@ -417,8 +558,8 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       {/* ── Hint + reset button ─────────────────────────────────────────── */}
       <div className="absolute top-4 left-4 flex items-center gap-2">
         <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
-          {zoomLevel >= 9
-            ? 'Click a person to view profile · Zoom out to group'
+          {zoomLevel >= SPLIT_ZOOM
+            ? 'Hover to preview · Click to view profile'
             : 'Click a marker to see classmates · Drag to explore'}
         </div>
         <button

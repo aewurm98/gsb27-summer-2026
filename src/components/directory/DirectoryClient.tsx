@@ -253,12 +253,12 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
                   )}
                   <div className="flex gap-1 mt-1">
                     {profile.can_host && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-400 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-600">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-emerald-500 text-white">
                         🏠 Host
                       </span>
                     )}
                     {profile.open_to_visit && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border bg-sky-100 text-sky-800 border-sky-400 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-600">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-sky-500 text-white">
                         ✈️ Visitor
                       </span>
                     )}
