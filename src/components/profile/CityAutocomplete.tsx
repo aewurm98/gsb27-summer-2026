@@ -28,17 +28,26 @@ export function CityAutocomplete({ value, onChange, placeholder = 'Search cityâ€
   const [loading, setLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Only open the dropdown when the user actively types â€” not when the value
+  // prop is synced from the parent (which happens on initial render).
+  const userTypedRef = useRef(false)
 
   useEffect(() => {
     setQuery(value)
   }, [value])
 
   useEffect(() => {
+    const wasUserTyped = userTypedRef.current
+    userTypedRef.current = false
+
     if (debounceRef.current) clearTimeout(debounceRef.current)
     if (!query || query.length < 2) {
       setResults([])
       return
     }
+    // Abort silently if this update came from the value-sync effect, not the user
+    if (!wasUserTyped) return
+
     setLoading(true)
     debounceRef.current = setTimeout(async () => {
       try {
@@ -81,7 +90,7 @@ export function CityAutocomplete({ value, onChange, placeholder = 'Search cityâ€
         <input
           type="text"
           value={query}
-          onChange={e => { setQuery(e.target.value); if (!e.target.value) onChange(null) }}
+          onChange={e => { userTypedRef.current = true; setQuery(e.target.value); if (!e.target.value) onChange(null) }}
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder={placeholder}
           className="w-full pl-9 pr-8 py-2 rounded-lg border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition"

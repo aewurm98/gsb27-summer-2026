@@ -519,15 +519,27 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       {/* ── City detail popup (cluster mode) ────────────────────────────── */}
       {selectedCity && (
         <div className="absolute top-4 right-4 w-72 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-10">
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-sm">{selectedCity.city}</h3>
+          <div className="p-4 border-b border-border flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm truncate">{selectedCity.city}</h3>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Users size={10} />
                 {selectedCity.profiles.length} classmate{selectedCity.profiles.length !== 1 ? 's' : ''} this week
               </p>
             </div>
-            <button onClick={() => setSelectedCity(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => {
+                  map.current?.flyTo({ center: [selectedCity.lng, selectedCity.lat], zoom: SPLIT_ZOOM + 1, duration: 1200, essential: true })
+                  setSelectedCity(null)
+                }}
+                className="text-xs px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 font-medium transition"
+                title="Zoom in to see individuals"
+              >
+                Zoom in
+              </button>
+              <button onClick={() => setSelectedCity(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
+            </div>
           </div>
           <div className="max-h-72 overflow-y-auto divide-y divide-border">
             {selectedCity.profiles.map(profile => (

@@ -1,14 +1,33 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
-import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
+import { formatDateRange, avatarColor, getInitials, getMatchScore } from '@/lib/utils'
 import Image from 'next/image'
 import { MapPin, Globe, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
+
+/** Server-renderable Harvey ball donut */
+function MatchBallSvg({ score }: { score: number }) {
+  const r = 8, size = 20, cx = 10, cy = 10
+  const circ = 2 * Math.PI * r
+  const fill = (score / 100) * circ
+  const color = score >= 70 ? '#16a34a' : score >= 45 ? '#ca8a04' : '#ea580c'
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeOpacity={0.2} strokeWidth={2.5} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={2.5}
+        strokeDasharray={`${fill} ${circ - fill}`}
+        transform={`rotate(-90 ${cx} ${cy})`}
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
 
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
 
+  // Fetch the viewed profile
   const { data: profile } = await supabase
     .from('profiles')
     .select('*, locations(*), travel_interests(*)')
@@ -17,11 +36,55 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
 
   if (!profile) notFound()
 
+  // Compute match score if a different logged-in user is viewing
+  let matchResult: { score: number; reasons: string[] } | null = null
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: viewer } = await supabase
+        .from('profiles')
+        .select('*, locations(*), travel_interests(*)')
+        .eq('user_id', user.id)
+        .single()
+      if (viewer && viewer.id !== profile.id) {
+        const result = getMatchScore(viewer, profile)
+        if (result.score > 0) matchResult = result
+      }
+    }
+  } catch { /* not logged in or no profile — skip match */ }
+
   const locations = (profile.locations ?? []).sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order)
   const interests = profile.travel_interests ?? []
 
+  const matchLabel = matchResult
+    ? matchResult.score >= 70 ? 'Strong match' : matchResult.score >= 45 ? 'Good match' : 'Some match'
+    : null
+  const matchColor = matchResult
+    ? matchResult.score >= 70 ? '#16a34a' : matchResult.score >= 45 ? '#ca8a04' : '#ea580c'
+    : null
+
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 space-y-6">
+
+      {/* Match banner — only shown when the viewer has a match */}
+      {matchResult && matchLabel && matchColor && (
+        <div className="rounded-2xl border bg-card p-4" style={{ borderColor: `${matchColor}30` }}>
+          <div className="flex items-start gap-3">
+            <MatchBallSvg score={matchResult.score} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: matchColor }}>{matchLabel}</p>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {matchResult.reasons.map((r, i) => (
+                  <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-accent text-muted-foreground border border-border">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="rounded-2xl border border-border bg-card p-6 flex items-start gap-4">
         <div className={`relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white font-semibold text-lg shrink-0 ${avatarColor(profile.full_name)}`}>

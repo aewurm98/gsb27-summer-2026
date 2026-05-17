@@ -24,6 +24,12 @@ export default async function TreksPage() {
     .eq('user_id', user!.id)
     .single()
 
+  // For admin member-picker: fetch all classmates (lightweight)
+  const { data: allProfiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, photo_url')
+    .order('full_name')
+
   // Compute suggested treks from travel interests (3+ classmates share a destination)
   const { data: allInterests } = await supabase
     .from('travel_interests')
@@ -73,6 +79,7 @@ export default async function TreksPage() {
         myProfileId={myProfile?.id ?? null}
         isAdmin={myProfile?.is_admin ?? false}
         suggestedDestinations={suggestedDestinations}
+        allProfiles={allProfiles ?? []}
       />
     </div>
   )

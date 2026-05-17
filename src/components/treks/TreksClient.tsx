@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trek, TrekInterest, Profile } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign } from 'lucide-react'
+import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search } from 'lucide-react'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -40,12 +40,17 @@ interface Props {
   myProfileId: string | null
   isAdmin: boolean
   suggestedDestinations: SuggestedDestination[]
+  allProfiles: Array<{ id: string; full_name: string; photo_url: string | null }>
 }
 
-export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggestedDestinations }: Props) {
+export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggestedDestinations, allProfiles }: Props) {
   const [treks, setTreks] = useState(initialTreks)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
+  // Admin member-picker state: trekId → search query
+  const [addMemberTrekId, setAddMemberTrekId] = useState<string | null>(null)
+  const [memberSearch, setMemberSearch] = useState('')
+  const [addingMember, setAddingMember] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -127,6 +132,19 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
     } finally {
       setCreating(false)
     }
+  }
+
+  async function handleAddMember(trekId: string, profileId: string) {
+    if (!isAdmin) return
+    setAddingMember(true)
+    const existing = treks.find(t => t.id === trekId)?.trek_interests.find(i => i.profile_id === profileId)
+    if (!existing) {
+      await supabase.from('trek_interests').insert({ trek_id: trekId, profile_id: profileId, status: 'interested' })
+    }
+    setAddMemberTrekId(null)
+    setMemberSearch('')
+    setAddingMember(false)
+    router.refresh()
   }
 
   return (
@@ -357,8 +375,8 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                     )}
                   </div>
 
-                  {myProfileId && (
-                    <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-2 shrink-0 items-start">
+                    {myProfileId && (
                       <button
                         onClick={() => handleInterest(trek.id, 'interested')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
@@ -367,10 +385,19 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                             : 'border-border hover:bg-accent'
                         }`}
                       >
-                        <Check size={12} /> Interested
+                        <Check size={12} /> {myInterest?.status === 'confirmed' ? 'Confirmed' : 'Interested'}
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => { setAddMemberTrekId(trek.id); setMemberSearch('') }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-border hover:bg-accent transition"
+                        title="Add a classmate to this trek"
+                      >
+                        <UserPlus size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Avatar stack */}
@@ -381,7 +408,7 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                         <div
                           key={i.id}
                           className={`relative w-7 h-7 rounded-full border-2 border-card overflow-hidden flex items-center justify-center text-white text-xs font-semibold ${avatarColor(i.profile?.full_name ?? '')}`}
-                          title={i.profile?.full_name}
+                          title={`${i.profile?.full_name}${i.status === 'confirmed' ? ' ✓' : ''}`}
                         >
                           {i.profile?.photo_url
                             ? <Image src={i.profile.photo_url} alt={i.profile?.full_name ?? ''} fill className="object-cover" unoptimized />
@@ -393,7 +420,61 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                     <p className="text-xs text-muted-foreground">
                       {interested.slice(0, 2).map(i => i.profile?.full_name?.split(' ')[0] ?? '').join(', ')}
                       {interested.length > 2 ? ` +${interested.length - 2} more` : ''}
+                      {confirmed.length > 0 ? ` · ${confirmed.length} confirmed` : ''}
                     </p>
+                  </div>
+                )}
+
+                {/* Admin: inline member picker */}
+                {isAdmin && addMemberTrekId === trek.id && (
+                  <div className="mt-4 pt-4 border-t border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">Add classmate to trek</p>
+                      <button onClick={() => setAddMemberTrekId(null)} className="text-muted-foreground hover:text-foreground">
+                        <X size={13} />
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <input
+                        autoFocus
+                        value={memberSearch}
+                        onChange={e => setMemberSearch(e.target.value)}
+                        placeholder="Search by name…"
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    {memberSearch.length >= 1 && (
+                      <div className="rounded-lg border border-border bg-card overflow-hidden max-h-48 overflow-y-auto">
+                        {allProfiles
+                          .filter(p =>
+                            p.full_name.toLowerCase().includes(memberSearch.toLowerCase()) &&
+                            !trek.trek_interests.some(i => i.profile_id === p.id)
+                          )
+                          .slice(0, 8)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              disabled={addingMember}
+                              onClick={() => handleAddMember(trek.id, p.id)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-accent text-xs transition disabled:opacity-50"
+                            >
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 ${avatarColor(p.full_name)}`}>
+                                {getInitials(p.full_name)}
+                              </div>
+                              <span className="truncate">{p.full_name}</span>
+                              <Plus size={11} className="ml-auto shrink-0 text-muted-foreground" />
+                            </button>
+                          ))
+                        }
+                        {allProfiles.filter(p =>
+                          p.full_name.toLowerCase().includes(memberSearch.toLowerCase()) &&
+                          !trek.trek_interests.some(i => i.profile_id === p.id)
+                        ).length === 0 && (
+                          <p className="px-3 py-2 text-xs text-muted-foreground">No matching classmates</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

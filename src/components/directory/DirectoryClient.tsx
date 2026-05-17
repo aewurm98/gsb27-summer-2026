@@ -54,11 +54,15 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
     return Array.from(set).sort()
   }, [profiles])
 
-  const allTags = useMemo(() => {
-    const set = new Set<string>()
-    profiles.forEach(p => (p.activity_tags ?? []).forEach(t => set.add(t)))
-    return Array.from(set).sort()
-  }, [profiles])
+  // My tags first (highlighted), then others sorted alphabetically
+  const { myTagSet, orderedTags } = useMemo(() => {
+    const myTagSet = new Set(myProfile?.activity_tags ?? [])
+    const allSet = new Set<string>()
+    profiles.forEach(p => (p.activity_tags ?? []).forEach(t => allSet.add(t)))
+    const mine = Array.from(allSet).filter(t => myTagSet.has(t)).sort()
+    const others = Array.from(allSet).filter(t => !myTagSet.has(t)).sort()
+    return { myTagSet, orderedTags: [...mine, ...others] }
+  }, [profiles, myProfile])
 
   const fuse = useMemo(() => new Fuse(profiles, {
     keys: ['full_name', 'section', 'additional_details'],
@@ -195,22 +199,31 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
         )}
       </div>
 
-      {/* Activity tag pills */}
-      {allTags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {allTags.map(tag => (
-            <button
-              key={tag}
-              onClick={() => toggleTag(tag)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
-                tagFilters.has(tag)
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
+      {/* Activity tag pills — viewer's own tags come first with a spark indicator */}
+      {orderedTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {myTagSet.size > 0 && (
+            <span className="text-xs text-muted-foreground mr-0.5">Your interests:</span>
+          )}
+          {orderedTags.map(tag => {
+            const isMyTag = myTagSet.has(tag)
+            const isActive = tagFilters.has(tag)
+            return (
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : isMyTag
+                      ? 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
+                      : 'bg-card text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                }`}
+              >
+                {tag}
+              </button>
+            )
+          })}
         </div>
       )}
 
