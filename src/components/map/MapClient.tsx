@@ -624,21 +624,23 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       )}
 
       {/* ── Hint + legend + reset button ────────────────────────────────── */}
-      <div className="absolute top-4 left-4 flex flex-col gap-2">
-        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
-          {zoomLevel >= SPLIT_ZOOM
-            ? 'Hover to preview · Click to view profile'
-            : 'Click a marker to see classmates · Drag to explore'}
-        </div>
-        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full bg-primary shrink-0" />
-            Based
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full bg-sky-500 shrink-0" />
-            Visiting
-          </span>
+      <div className="absolute top-4 left-4 flex items-start gap-2">
+        <div className="flex flex-col gap-1.5">
+          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
+            {zoomLevel >= SPLIT_ZOOM
+              ? 'Hover to preview · Click to view profile'
+              : 'Click a marker to see classmates · Drag to explore'}
+          </div>
+          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
+              Based
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+              Visiting
+            </span>
+          </div>
         </div>
         <button
           onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}
