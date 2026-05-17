@@ -263,6 +263,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       attributionControl: false,
+      renderWorldCopies: false,
     })
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     map.current.on('load', () => setMapLoaded(true))
