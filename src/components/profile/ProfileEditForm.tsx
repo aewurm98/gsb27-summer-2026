@@ -204,17 +204,45 @@ export function ProfileEditForm({
       )
     : []
 
+  function resizeImage(file: File, maxSize = 400): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(
+          blob => (blob ? resolve(blob) : reject(new Error('Canvas export failed'))),
+          'image/jpeg',
+          0.85
+        )
+      }
+      img.onerror = reject
+      img.src = url
+    })
+  }
+
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploadingPhoto(true)
     try {
-      const ext = file.name.split('.').pop()
-      const path = `${userId}/avatar.${ext}`
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      // Resize + compress to JPEG ≤ 400 px before upload.
+      // Keeps storage small and ensures fast load on map/directory/profile.
+      const compressed = await resizeImage(file, 400)
+      const path = `${userId}/avatar.jpeg`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, compressed, { upsert: true, contentType: 'image/jpeg' })
       if (uploadError) throw uploadError
+      // Bust the CDN cache so the new photo appears immediately site-wide
       const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-      setPhotoUrl(data.publicUrl)
+      setPhotoUrl(`${data.publicUrl}?t=${Date.now()}`)
     } catch (err: unknown) {
       console.error(err)
     } finally {
