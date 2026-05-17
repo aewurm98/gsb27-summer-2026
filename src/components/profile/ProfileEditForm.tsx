@@ -15,7 +15,7 @@ const EXPERIENCE_LABELS = ['Summer Internship', 'Traveling', 'Visiting family/fr
 const ACTIVITY_TAG_GROUPS = [
   {
     label: 'Outdoors',
-    tags: ['hiking', 'backpacking', 'cycling', 'rock climbing', 'water sports', 'snow sports', 'golf'],
+    tags: ['hiking', 'backpacking', 'cycling', 'rock climbing', 'surfing', 'water sports', 'beaches', 'snow sports', 'golf', 'camping'],
   },
   {
     label: 'Food & Drink',
@@ -23,15 +23,23 @@ const ACTIVITY_TAG_GROUPS = [
   },
   {
     label: 'Arts & Culture',
-    tags: ['museums & galleries', 'live music & concerts', 'theater & performance', 'historical sites'],
+    tags: ['museums & galleries', 'live music & concerts', 'theater & performance', 'historical sites', 'photography'],
   },
   {
     label: 'Wellness',
     tags: ['yoga & pilates', 'running', 'fitness & gym', 'spa & wellness'],
   },
   {
+    label: 'Sports & Recreation',
+    tags: ['tennis', 'pickleball', 'swimming', 'volleyball & beach sports'],
+  },
+  {
     label: 'Nightlife & Social',
-    tags: ['bars & nightlife', 'sports events', 'rooftop lounges', 'festivals & events'],
+    tags: ['bars & nightlife', 'sports events', 'rooftop lounges', 'festivals & events', 'comedy shows'],
+  },
+  {
+    label: 'Travel',
+    tags: ['road trips', 'sailing & boating'],
   },
 ] as const
 

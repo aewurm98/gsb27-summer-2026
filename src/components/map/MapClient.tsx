@@ -21,6 +21,12 @@ type ExperienceSnippet = {
   neighborhood: string | null
 }
 
+const VISITOR_LABELS = new Set(['Traveling', 'Visiting family/friends'])
+
+function isVisitorExperience(exp?: ExperienceSnippet): boolean {
+  return exp?.label != null && VISITOR_LABELS.has(exp.label)
+}
+
 interface CityGroup {
   city: string
   lat: number
@@ -339,6 +345,21 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           inner.textContent = getInitials(profile.full_name)
           el.appendChild(inner)
 
+          // Visitor badge overlay on individual avatars
+          if (isVisitorExperience(profile.currentExperience)) {
+            const badge = document.createElement('div')
+            badge.style.cssText = `
+              position:absolute;bottom:-2px;right:-2px;
+              width:14px;height:14px;border-radius:50%;
+              background:#0ea5e9;border:1.5px solid white;
+              display:flex;align-items:center;justify-content:center;
+              font-size:8px;pointer-events:none;
+            `
+            badge.textContent = '✈'
+            el.style.position = 'relative'
+            el.appendChild(badge)
+          }
+
           el.onmouseenter = () => {
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
             inner.style.transform = 'scale(1.2)'
@@ -364,32 +385,57 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           )
         })
       } else {
-        // Cluster count bubble
+        // Cluster count bubble — differentiate residents vs visitors
         const count = group.profiles.length
         const size = Math.max(36, 28 + count * 4)
+        const residentCount = group.profiles.filter(p => !isVisitorExperience(p.currentExperience)).length
+        const allVisitors = residentCount === 0
+        // Visitor-only: sky blue; mixed/resident: Stanford red
+        const bg = allVisitors ? '#0ea5e9' : 'var(--primary,#8C1515)'
+        const shadow = allVisitors ? 'rgba(14,165,233,0.4)' : 'rgba(140,21,21,0.4)'
+        const shadowHover = allVisitors ? 'rgba(14,165,233,0.6)' : 'rgba(140,21,21,0.55)'
 
         const el = document.createElement('div')
-        el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;`
+        el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;position:relative;`
 
         const inner = document.createElement('div')
         inner.style.cssText = `
           width:${size}px;height:${size}px;border-radius:50%;
-          background:var(--primary,#8C1515);border:3px solid white;
-          box-shadow:0 2px 12px rgba(140,21,21,0.4);
+          background:${bg};border:3px solid white;
+          box-shadow:0 2px 12px ${shadow};
           display:flex;align-items:center;justify-content:center;
           color:white;font-weight:700;font-size:${count > 9 ? 11 : 12}px;
           transition:transform 0.15s ease,box-shadow 0.15s ease;
         `
-        inner.textContent = count === 1 ? getInitials(group.profiles[0].full_name) : String(count)
+        // Visitor-only clusters get a ✈ prefix; mixed/resident clusters show count normally
+        if (allVisitors) {
+          inner.innerHTML = count === 1
+            ? `<span style="font-size:14px">✈</span>`
+            : `<span style="font-size:${count > 9 ? 9 : 10}px">✈${count}</span>`
+        } else {
+          inner.textContent = count === 1 ? getInitials(group.profiles[0].full_name) : String(count)
+          // If mixed, add small visitor badge
+          if (residentCount < count) {
+            const badge = document.createElement('div')
+            badge.style.cssText = `
+              position:absolute;top:-4px;right:-4px;
+              background:#0ea5e9;border:1.5px solid white;border-radius:50%;
+              width:16px;height:16px;display:flex;align-items:center;justify-content:center;
+              font-size:8px;color:white;font-weight:700;
+            `
+            badge.textContent = '✈'
+            el.appendChild(badge)
+          }
+        }
         el.appendChild(inner)
 
         el.onmouseenter = () => {
           inner.style.transform = 'scale(1.2)'
-          inner.style.boxShadow = '0 4px 18px rgba(140,21,21,0.55)'
+          inner.style.boxShadow = `0 4px 18px ${shadowHover}`
         }
         el.onmouseleave = () => {
           inner.style.transform = 'scale(1)'
-          inner.style.boxShadow = '0 2px 12px rgba(140,21,21,0.4)'
+          inner.style.boxShadow = `0 2px 12px ${shadow}`
         }
         el.onclick = () => setSelectedCity(group)
 
@@ -542,37 +588,57 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
             </div>
           </div>
           <div className="max-h-72 overflow-y-auto divide-y divide-border">
-            {selectedCity.profiles.map(profile => (
-              <Link key={profile.id} href={`/profile/${profile.id}`}
-                className="flex items-center gap-3 p-3 hover:bg-accent transition-colors">
-                <div className={`relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-semibold shrink-0 ${avatarColor(profile.full_name)}`}>
-                  {profile.photo_url
-                    ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />
-                    : getInitials(profile.full_name)
-                  }
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{profile.full_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {profile.currentExperience?.neighborhood
-                      ? profile.currentExperience.neighborhood
-                      : [profile.currentExperience?.role, profile.currentExperience?.company].filter(Boolean).join(' @ ')
-                        || profile.currentExperience?.label
-                        || ''}
-                  </p>
-                </div>
-              </Link>
-            ))}
+            {selectedCity.profiles.map(profile => {
+              const visiting = isVisitorExperience(profile.currentExperience)
+              return (
+                <Link key={profile.id} href={`/profile/${profile.id}`}
+                  className="flex items-center gap-3 p-3 hover:bg-accent transition-colors">
+                  <div className={`relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-semibold shrink-0 ${avatarColor(profile.full_name)}`}>
+                    {profile.photo_url
+                      ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />
+                      : getInitials(profile.full_name)
+                    }
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium truncate">{profile.full_name}</p>
+                      {visiting && (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 font-medium">
+                          ✈ visiting
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {profile.currentExperience?.neighborhood
+                        ? profile.currentExperience.neighborhood
+                        : [profile.currentExperience?.role, profile.currentExperience?.company].filter(Boolean).join(' @ ')
+                          || profile.currentExperience?.label
+                          || ''}
+                    </p>
+                  </div>
+                </Link>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* ── Hint + reset button ─────────────────────────────────────────── */}
-      <div className="absolute top-4 left-4 flex items-center gap-2">
+      {/* ── Hint + legend + reset button ────────────────────────────────── */}
+      <div className="absolute top-4 left-4 flex flex-col gap-2">
         <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
           {zoomLevel >= SPLIT_ZOOM
             ? 'Hover to preview · Click to view profile'
             : 'Click a marker to see classmates · Drag to explore'}
+        </div>
+        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-primary shrink-0" />
+            Based
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-sky-500 shrink-0" />
+            Visiting
+          </span>
         </div>
         <button
           onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}

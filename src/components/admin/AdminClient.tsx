@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Profile, Location, TravelInterest, Trek, TrekInterest } from '@/lib/types'
+import { Profile, Location, TravelInterest, Trek, TrekInterest, SUMMER_START, SUMMER_END } from '@/lib/types'
 import { formatDateRange, getSummerWeeks, getLocationAtWeek } from '@/lib/utils'
 import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus, BarChart2, LayoutGrid, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
@@ -20,6 +20,7 @@ interface Props {
 export function AdminClient({ profiles, treks }: Props) {
   const [tab, setTab] = useState<'classmates' | 'treks' | 'insights' | 'profiles'>('classmates')
   const [insightsTab, setInsightsTab] = useState<'destinations' | 'heatmap' | 'completeness'>('destinations')
+  const [destinationsView, setDestinationsView] = useState<'table' | 'timeline'>('table')
   const [search, setSearch] = useState('')
   const [completenessSort, setCompletenessSort] = useState<'asc' | 'desc' | 'alpha'>('asc')
   const [heatmapCitySort, setHeatmapCitySort] = useState<'count' | 'alpha'>('count')
@@ -145,6 +146,28 @@ export function AdminClient({ profiles, treks }: Props) {
   }, [profiles])
 
   const sortedProfiles = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name))
+
+  // For each top destination, compute week-by-week interest counts using interest date ranges.
+  // Interests with no dates are counted in every week (flexible timing).
+  const destinationTimeline = useMemo(() => {
+    const weeks = getSummerWeeks()
+    return trekInsights.slice(0, 12).map(insight => {
+      const weeklyData = weeks.map(week => {
+        let count = 0
+        profiles.forEach(p => {
+          (p.travel_interests ?? []).forEach(t => {
+            if (t.destination_city !== insight.city || t.destination_country !== insight.country) return
+            const intStart = t.interest_start_date ? new Date(t.interest_start_date) : SUMMER_START
+            const intEnd   = t.interest_end_date   ? new Date(t.interest_end_date)   : SUMMER_END
+            if (intStart <= week.end && intEnd >= week.start) count++
+          })
+        })
+        return count
+      })
+      const maxCount = Math.max(1, ...weeklyData)
+      return { city: insight.city, country: insight.country, total: insight.classmates.length, weeklyData, maxCount }
+    })
+  }, [trekInsights, profiles])
 
   // ─── Phase 4 Analytics ────────────────────────────────────────────────────
 
@@ -539,13 +562,24 @@ export function AdminClient({ profiles, treks }: Props) {
           {/* Destinations */}
           {insightsTab === 'destinations' && (
             <>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <TrendingUp size={14} />
-                <span>Top destinations by classmate interest — potential trek candidates</span>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <TrendingUp size={14} />
+                  <span>Top destinations by classmate interest — potential trek candidates</span>
+                </div>
+                <div className="flex gap-1 rounded-lg border border-border bg-card p-0.5 text-xs">
+                  {(['table', 'timeline'] as const).map(v => (
+                    <button key={v} onClick={() => setDestinationsView(v)}
+                      className={`px-3 py-1 rounded-md capitalize font-medium transition ${destinationsView === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                      {v === 'timeline' ? 'Interest timeline' : 'Table'}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               {trekInsights.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-12">No travel interests submitted yet.</p>
-              ) : (
+              ) : destinationsView === 'table' ? (
                 <div className="rounded-2xl border border-border overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
@@ -582,6 +616,53 @@ export function AdminClient({ profiles, treks }: Props) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              ) : (
+                /* Timeline view: each destination row shows week-by-week interest concentration */
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Each bar = # classmates interested in visiting that week (based on stated date preferences; no-date interests count all summer).
+                  </p>
+                  <div className="rounded-2xl border border-border overflow-hidden">
+                    {/* Week header */}
+                    <div className="flex bg-muted/50 border-b border-border">
+                      <div className="w-40 shrink-0 px-4 py-2 text-xs font-medium text-muted-foreground">Destination</div>
+                      <div className="flex-1 overflow-x-auto">
+                        <div className="flex min-w-max">
+                          {getSummerWeeks().map(w => (
+                            <div key={w.index} className="w-10 text-center py-2 text-[10px] text-muted-foreground shrink-0" title={w.dateLabel}>
+                              W{w.index + 1}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {destinationTimeline.map(dest => (
+                      <div key={`${dest.city}|${dest.country}`} className="flex border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors">
+                        <div className="w-40 shrink-0 px-4 py-3">
+                          <p className="text-xs font-medium truncate">{dest.city}</p>
+                          <p className="text-[10px] text-muted-foreground">{dest.total} interested</p>
+                        </div>
+                        <div className="flex-1 overflow-x-auto flex items-center py-2">
+                          <div className="flex min-w-max gap-0.5">
+                            {dest.weeklyData.map((count, wi) => (
+                              <div
+                                key={wi}
+                                className="w-10 h-7 rounded flex items-center justify-center text-[10px] font-semibold shrink-0"
+                                title={`Week ${wi + 1}: ${count} interested`}
+                                style={count > 0 ? {
+                                  backgroundColor: `rgba(140,21,21,${Math.max(0.12, count / dest.maxCount * 0.85)})`,
+                                  color: count / dest.maxCount > 0.45 ? 'white' : '#8C1515',
+                                } : { color: 'transparent' }}
+                              >
+                                {count > 0 ? count : '·'}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </>

@@ -12,9 +12,20 @@ import Link from 'next/link'
 import type { SuggestedDestination } from '@/app/(main)/treks/page'
 
 const ACTIVITY_TAGS = [
-  'hiking', 'surfing', 'skiing', 'cycling', 'running', 'yoga',
-  'food & wine', 'nightlife', 'art & culture', 'history', 'beaches',
-  'mountains', 'cities', 'road trips', 'backpacking', 'luxury',
+  // Outdoors
+  'hiking', 'backpacking', 'cycling', 'rock climbing', 'surfing', 'water sports', 'beaches', 'snow sports', 'golf', 'camping',
+  // Food & Drink
+  'fine dining', 'street food & markets', 'wine & cocktails', 'craft beer', 'cooking classes',
+  // Arts & Culture
+  'museums & galleries', 'live music & concerts', 'theater & performance', 'historical sites', 'photography',
+  // Wellness
+  'yoga & pilates', 'running', 'fitness & gym', 'spa & wellness',
+  // Sports & Recreation
+  'tennis', 'pickleball', 'swimming', 'volleyball & beach sports',
+  // Nightlife & Social
+  'bars & nightlife', 'sports events', 'rooftop lounges', 'festivals & events', 'comedy shows',
+  // Travel
+  'road trips', 'sailing & boating',
 ] as const
 
 const COST_TIERS = ['budget', 'moderate', 'premium'] as const
@@ -260,6 +271,7 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
           <div className="flex items-center gap-2">
             <Sparkles size={14} className="text-primary" />
             <h2 className="text-sm font-semibold">Suggested by classmate interest</h2>
+            <span className="text-xs text-muted-foreground">— step up as group lead to kick one off</span>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
             {suggestedDestinations.map(dest => (
@@ -272,12 +284,13 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                       {dest.interestedProfiles.length} classmates interested
                     </p>
                   </div>
-                  {isAdmin && (
+                  {/* Admins see "Create trek"; any logged-in classmate sees "I'll lead this" */}
+                  {myProfileId && (
                     <button
                       onClick={() => prefillFromSuggestion(dest)}
                       className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
                     >
-                      <Plus size={11} /> Create trek
+                      <Plus size={11} /> {isAdmin ? 'Create trek' : "I'll lead this"}
                     </button>
                   )}
                 </div>
@@ -317,15 +330,14 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
           <div>
             <h3 className="font-semibold text-lg">Treks coming soon</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              Admins will organize group trips based on classmate interest.
               Add destinations to your{' '}
               <Link href="/profile/edit" className="text-primary underline underline-offset-2">travel interests</Link>
-              {' '}and treks will be created when enough classmates want the same destination.
+              {' '}— when 3+ classmates share a destination, it appears here as a suggested trek and anyone can step up as group lead.
             </p>
           </div>
           {isAdmin && (
             <button onClick={() => setShowCreateForm(true)} className="mt-2 text-sm text-primary hover:underline">
-              + Create the first trek (admin only)
+              + Create a trek (admin)
             </button>
           )}
         </div>
@@ -363,6 +375,17 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                     {trek.description && (
                       <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{trek.description}</p>
                     )}
+                    {/* Group lead */}
+                    {(() => {
+                      const lead = allProfiles.find(p => p.id === trek.created_by)
+                      if (!lead) return null
+                      return (
+                        <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                          <UserPlus size={10} />
+                          Led by <span className="font-medium text-foreground">{lead.full_name}</span>
+                        </p>
+                      )
+                    })()}
                     {/* Activity tags */}
                     {trek.activity_tags?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-3">

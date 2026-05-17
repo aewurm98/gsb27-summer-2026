@@ -27,26 +27,33 @@ export function getLocationAtWeek(locations: Location[], weekIndex: number): Loc
   if (!week) return null
 
   const SUMMER_END = addWeeks(SUMMER_START, SUMMER_WEEKS)
-  // Sort by sort_order so adjacent-stop fallbacks are correct
+  // Sort by sort_order so adjacent-stop null-date expansion is correct
   const sorted = [...locations].sort((a, b) => a.sort_order - b.sort_order)
+
+  // Collect ALL locations that overlap this week, with their resolved durations.
+  // When multiple overlap (e.g. internship all summer + Paris visit for 3 days),
+  // we prefer the most specific (shortest) one so nomadic short visits win.
+  const matches: Array<{ loc: Location; duration: number }> = []
 
   for (let i = 0; i < sorted.length; i++) {
     const loc = sorted[i]
-    // Fill null start from previous stop's end, or summer start
     const start = loc.start_date
       ? parseISO(loc.start_date)
       : (sorted[i - 1]?.end_date ? parseISO(sorted[i - 1].end_date!) : SUMMER_START)
-    // Fill null end from next stop's start, or summer end
     const end = loc.end_date
       ? parseISO(loc.end_date)
       : (sorted[i + 1]?.start_date ? parseISO(sorted[i + 1].start_date!) : SUMMER_END)
 
     if (isWithinInterval(week.start, { start, end }) || isWithinInterval(week.end, { start, end }) ||
         (start <= week.start && end >= week.end)) {
-      return loc
+      matches.push({ loc, duration: end.getTime() - start.getTime() })
     }
   }
-  return null
+
+  if (matches.length === 0) return null
+  // Return the most specific match (shortest resolved duration wins)
+  matches.sort((a, b) => a.duration - b.duration)
+  return matches[0].loc
 }
 
 export function getOverlappingClassmates(
