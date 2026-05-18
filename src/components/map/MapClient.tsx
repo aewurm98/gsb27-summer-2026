@@ -5,7 +5,7 @@ import Image from 'next/image'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
-import { getSummerWeeks, getLocationAtWeek, avatarColor, avatarColorHex, getInitials } from '@/lib/utils'
+import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
 import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
@@ -214,7 +214,7 @@ function ProfileHoverCard({
 export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
-  const markersRef = useRef<mapboxgl.Marker[]>([])
+  const cityGroupsRef = useRef<CityGroup[]>([])
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { weekIndex, setWeekIndex } = useMapStore()
@@ -253,6 +253,8 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     return Array.from(cityMap.values())
   }, [profiles, weekIndex])
 
+  cityGroupsRef.current = cityGroups
+
   // ── Map init ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainer.current || map.current) return
@@ -268,7 +270,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     map.current.on('load', () => setMapLoaded(true))
   }, [])
 
-  // ── Track viewport + zoom; dismiss hover card on pan/zoom ────────────────
+  // ── Track viewport + zoom ─────────────────────────────────────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current) return
     const update = () => {
@@ -277,27 +279,14 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
       setZoomLevel(map.current.getZoom())
     }
-    const hideMarkers = () => {
-      markersRef.current.forEach(m => { m.getElement().style.visibility = 'hidden' })
-    }
-    const snapZoom = () => {
-      if (!map.current) return
-      const z = map.current.getZoom()
-      const snapped = Math.round(z)
-      if (z !== snapped) map.current.jumpTo({ zoom: snapped })
-      markersRef.current.forEach(m => { m.getElement().style.visibility = '' })
-      update()
-    }
     const dismiss = () => setHoverCard(null)
     update()
     map.current.on('moveend', update)
-    map.current.on('zoomstart', hideMarkers)
-    map.current.on('zoomend', snapZoom)
+    map.current.on('zoomend', update)
     map.current.on('movestart', dismiss)
     return () => {
       map.current?.off('moveend', update)
-      map.current?.off('zoomstart', hideMarkers)
-      map.current?.off('zoomend', snapZoom)
+      map.current?.off('zoomend', update)
       map.current?.off('movestart', dismiss)
     }
   }, [mapLoaded])
@@ -323,147 +312,109 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD))
   }, [cityGroups, mapBounds, mapSize])
 
-  // ── Markers ──────────────────────────────────────────────────────────────
+  // ── GL source + layers (once after map loads) ────────────────────────────
   useEffect(() => {
-    if (!map.current) return
-    markersRef.current.forEach(m => m.remove())
-    markersRef.current = []
-    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
-    setHoverCard(null)
+    if (!mapLoaded || !map.current) return
+    const m = map.current
 
-    const isSplit = zoomLevel >= SPLIT_ZOOM
+    m.addSource('classmates', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
-    cityGroups.forEach(group => {
-      if (isSplit) {
-        // Individual avatar markers
-        const n = group.profiles.length
-        group.profiles.forEach((profile, idx) => {
-          const angle = n === 1 ? -Math.PI / 2 : (idx / n) * 2 * Math.PI - Math.PI / 2
-          const r = n === 1 ? 0 : Math.min(44, 16 + n * 3)
-          const offset: [number, number] = [Math.cos(angle) * r, Math.sin(angle) * r]
+    m.addLayer({
+      id: 'classmate-circles',
+      type: 'circle',
+      source: 'classmates',
+      paint: {
+        'circle-radius': ['get', 'radius'],
+        'circle-color': ['case', ['get', 'allVisitors'], '#0ea5e9', '#8C1515'],
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#ffffff',
+      },
+    })
 
-          const el = document.createElement('div')
-          el.style.cssText = `width:34px;height:34px;cursor:pointer;`
+    m.addLayer({
+      id: 'classmate-labels',
+      type: 'symbol',
+      source: 'classmates',
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-size': 12,
+        'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: { 'text-color': '#ffffff' },
+    })
 
-          const inner = document.createElement('div')
-          inner.style.cssText = `
-            width:34px;height:34px;border-radius:50%;
-            background:${avatarColorHex(profile.full_name)};
-            border:2.5px solid white;
-            box-shadow:0 2px 8px rgba(0,0,0,0.18);
-            display:flex;align-items:center;justify-content:center;
-            color:white;font-weight:700;font-size:11px;
-            transition:transform 0.15s ease,box-shadow 0.15s ease;
-          `
-          inner.textContent = getInitials(profile.full_name)
-          el.appendChild(inner)
+    m.on('mouseenter', 'classmate-circles', () => { m.getCanvas().style.cursor = 'pointer' })
+    m.on('mouseleave', 'classmate-circles', () => { m.getCanvas().style.cursor = '' })
+  }, [mapLoaded])
 
-          // Visitor badge overlay on individual avatars
-          if (isVisitorExperience(profile.currentExperience)) {
-            const badge = document.createElement('div')
-            badge.style.cssText = `
-              position:absolute;bottom:-2px;right:-2px;
-              width:14px;height:14px;border-radius:50%;
-              background:#0ea5e9;border:1.5px solid white;
-              display:flex;align-items:center;justify-content:center;
-              font-size:8px;pointer-events:none;
-            `
-            badge.textContent = '✈'
-            el.style.position = 'relative'
-            el.appendChild(badge)
-          }
+  // ── Update GL source data when city groups change ─────────────────────────
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return
+    const source = map.current.getSource('classmates') as mapboxgl.GeoJSONSource
+    if (!source) return
 
-          el.onmouseenter = () => {
-            if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
-            inner.style.transform = 'scale(1.2)'
-            inner.style.boxShadow = '0 4px 14px rgba(0,0,0,0.28)'
-            if (!map.current || !mapContainer.current) return
-            const proj = map.current.project([group.lng, group.lat])
-            const x = proj.x + offset[0]
-            const y = proj.y + offset[1]
-            const above = y > 160
-            setHoverCard({ profile, x, y, above })
-          }
-          el.onmouseleave = () => {
-            inner.style.transform = 'scale(1)'
-            inner.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)'
-            hoverTimeout.current = setTimeout(() => setHoverCard(null), 160)
-          }
-          el.onclick = () => { window.location.href = `/profile/${profile.id}` }
-
-          markersRef.current.push(
-            new mapboxgl.Marker({ element: el, offset })
-              .setLngLat([group.lng, group.lat])
-              .addTo(map.current!)
-          )
-        })
-      } else {
-        // Cluster count bubble — differentiate residents vs visitors
-        const count = group.profiles.length
-        const size = Math.max(36, 28 + count * 4)
-        const residentCount = group.profiles.filter(p => !isVisitorExperience(p.currentExperience)).length
-        const allVisitors = residentCount === 0
-        // Visitor-only: sky blue; mixed/resident: Stanford red
-        const bg = allVisitors ? '#0ea5e9' : 'var(--primary,#8C1515)'
-        const shadow = allVisitors ? 'rgba(14,165,233,0.4)' : 'rgba(140,21,21,0.4)'
-        const shadowHover = allVisitors ? 'rgba(14,165,233,0.6)' : 'rgba(140,21,21,0.55)'
-
-        const el = document.createElement('div')
-        el.style.cssText = `width:${size}px;height:${size}px;cursor:pointer;position:relative;`
-
-        const inner = document.createElement('div')
-        inner.style.cssText = `
-          width:${size}px;height:${size}px;border-radius:50%;
-          background:${bg};border:3px solid white;
-          box-shadow:0 2px 12px ${shadow};
-          display:flex;align-items:center;justify-content:center;
-          color:white;font-weight:700;font-size:${count > 9 ? 11 : 12}px;
-          transition:transform 0.15s ease,box-shadow 0.15s ease;
-        `
-        // Visitor-only clusters get a ✈ prefix; mixed/resident clusters show count normally
-        if (allVisitors) {
-          inner.innerHTML = count === 1
-            ? `<span style="font-size:14px">✈</span>`
-            : `<span style="font-size:${count > 9 ? 9 : 10}px">✈${count}</span>`
-        } else {
-          inner.textContent = count === 1 ? getInitials(group.profiles[0].full_name) : String(count)
-          // If mixed, add small visitor badge
-          if (residentCount < count) {
-            const badge = document.createElement('div')
-            badge.style.cssText = `
-              position:absolute;top:-4px;right:-4px;
-              background:#0ea5e9;border:1.5px solid white;border-radius:50%;
-              width:16px;height:16px;display:flex;align-items:center;justify-content:center;
-              font-size:8px;color:white;font-weight:700;
-            `
-            badge.textContent = '✈'
-            el.appendChild(badge)
-          }
-        }
-        el.appendChild(inner)
-
-        el.onmouseenter = () => {
-          inner.style.transform = 'scale(1.2)'
-          inner.style.boxShadow = `0 4px 18px ${shadowHover}`
-        }
-        el.onmouseleave = () => {
-          inner.style.transform = 'scale(1)'
-          inner.style.boxShadow = `0 2px 12px ${shadow}`
-        }
-        el.onclick = () => setSelectedCity(group)
-
-        markersRef.current.push(
-          new mapboxgl.Marker({ element: el })
-            .setLngLat([group.lng, group.lat])
-            .addTo(map.current!)
-        )
+    const features = cityGroups.map(group => {
+      const count = group.profiles.length
+      const residentCount = group.profiles.filter(p => !isVisitorExperience(p.currentExperience)).length
+      const allVisitors = residentCount === 0
+      const label = count === 1
+        ? getInitials(group.profiles[0].full_name)
+        : (allVisitors ? `✈${count}` : String(count))
+      return {
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [group.lng, group.lat] },
+        properties: { city: group.city, count, allVisitors, label, radius: Math.max(18, 14 + count * 2) },
       }
     })
 
-    return () => {
-      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    source.setData({ type: 'FeatureCollection', features })
+  }, [cityGroups, mapLoaded])
+
+  // ── GL click + hover handlers ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return
+    const m = map.current
+
+    const handleClick = (e: mapboxgl.MapLayerMouseEvent) => {
+      const props = e.features?.[0]?.properties
+      if (!props) return
+      const group = cityGroupsRef.current.find(g => g.city.toLowerCase() === props.city.toLowerCase())
+      if (!group) return
+      if (group.profiles.length === 1) {
+        window.location.href = `/profile/${group.profiles[0].id}`
+      } else {
+        setSelectedCity(group)
+      }
     }
-  }, [cityGroups, zoomLevel])
+
+    const handleMousemove = (e: mapboxgl.MapLayerMouseEvent) => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+      const feature = e.features?.[0]
+      if (!feature?.properties || feature.properties.count > 1) { setHoverCard(null); return }
+      const group = cityGroupsRef.current.find(g => g.city.toLowerCase() === feature.properties!.city.toLowerCase())
+      if (!group || group.profiles.length !== 1) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const coords = (feature.geometry as any).coordinates as [number, number]
+      const proj = m.project(coords)
+      setHoverCard({ profile: group.profiles[0], x: proj.x, y: proj.y, above: proj.y > 160 })
+    }
+
+    const handleMouseleave = () => {
+      hoverTimeout.current = setTimeout(() => setHoverCard(null), 160)
+    }
+
+    m.on('click', 'classmate-circles', handleClick)
+    m.on('mousemove', 'classmate-circles', handleMousemove)
+    m.on('mouseleave', 'classmate-circles', handleMouseleave)
+
+    return () => {
+      m.off('click', 'classmate-circles', handleClick)
+      m.off('mousemove', 'classmate-circles', handleMousemove)
+      m.off('mouseleave', 'classmate-circles', handleMouseleave)
+    }
+  }, [mapLoaded])
 
   // ── Playback ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -640,9 +591,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       <div className="absolute top-4 left-4 flex items-start gap-2">
         <div className="flex flex-col gap-1.5">
           <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
-            {zoomLevel >= SPLIT_ZOOM
-              ? 'Hover to preview · Click to view profile'
-              : 'Click a marker to see classmates · Drag to explore'}
+            Click a marker to explore · Drag to pan
           </div>
           <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
             <span className="flex items-center gap-1.5">
