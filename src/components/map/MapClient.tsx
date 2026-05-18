@@ -48,7 +48,7 @@ interface HoverCard {
 }
 
 const INITIAL_CENTER: [number, number] = [-100, 40]
-const INITIAL_ZOOM = 3.5
+const INITIAL_ZOOM = 4
 const SPLIT_ZOOM = 9
 
 /** Ray from centre (cx,cy) toward (px,py) — where does it hit the padded rectangle? */
@@ -277,14 +277,21 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
       setZoomLevel(map.current.getZoom())
     }
+    const snapZoom = () => {
+      if (!map.current) return
+      const z = map.current.getZoom()
+      const snapped = Math.round(z)
+      if (z !== snapped) map.current.jumpTo({ zoom: snapped })
+      update()
+    }
     const dismiss = () => setHoverCard(null)
     update()
     map.current.on('moveend', update)
-    map.current.on('zoomend', update)
+    map.current.on('zoomend', snapZoom)
     map.current.on('movestart', dismiss)
     return () => {
       map.current?.off('moveend', update)
-      map.current?.off('zoomend', update)
+      map.current?.off('zoomend', snapZoom)
       map.current?.off('movestart', dismiss)
     }
   }, [mapLoaded])
