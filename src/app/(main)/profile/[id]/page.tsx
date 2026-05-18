@@ -23,8 +23,15 @@ function MatchBallSvg({ score }: { score: number }) {
   )
 }
 
-export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ from?: string }>
+}) {
   const { id } = await params
+  const { from } = await searchParams
   const supabase = await createClient()
 
   // Fetch the viewed profile
@@ -203,8 +210,11 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      <Link href="/directory" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition">
-        ← Back to directory
+      <Link
+        href={from === 'map' ? '/map' : '/directory'}
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition"
+      >
+        ← Back to {from === 'map' ? 'map' : 'directory'}
       </Link>
     </div>
   )

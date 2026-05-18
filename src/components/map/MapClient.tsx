@@ -6,7 +6,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane, X } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
@@ -42,14 +42,30 @@ interface OffScreenIndicator extends CityGroup {
 
 interface HoverCard {
   profile: MapProfile & { currentExperience?: ExperienceSnippet }
-  x: number   // px from left of map container
-  y: number   // px from top of map container
+  x: number
+  y: number
   above: boolean
 }
 
 const INITIAL_CENTER: [number, number] = [-100, 40]
 const INITIAL_ZOOM = 4
+// Below SPLIT_ZOOM: one aggregate circle per city.
+// At/above SPLIT_ZOOM: individual circles spread around the city center.
 const SPLIT_ZOOM = 9
+
+/**
+ * Fans N profiles in a ring around (baseLng, baseLat).
+ * 0.02° ≈ 2.2 km; circles visually separate by zoom 11.
+ */
+function spreadCoords(
+  baseLng: number, baseLat: number,
+  index: number, total: number
+): [number, number] {
+  if (total === 1) return [baseLng, baseLat]
+  const angle = (2 * Math.PI * index) / total - Math.PI / 2
+  const r = 0.02
+  return [baseLng + r * Math.cos(angle), baseLat + r * Math.sin(angle)]
+}
 
 /** Ray from centre (cx,cy) toward (px,py) — where does it hit the padded rectangle? */
 function getEdgePoint(
@@ -118,15 +134,19 @@ function resolveIndicatorCollisions(
   ]
 }
 
-// ── Hover card (React overlay, not Mapbox popup) ─────────────────────────────
+// ── Profile card (hover preview + click-pinned) ───────────────────────────────
 function ProfileHoverCard({
   card,
   onMouseEnter,
   onMouseLeave,
+  showClose,
+  onClose,
 }: {
   card: HoverCard
   onMouseEnter: () => void
   onMouseLeave: () => void
+  showClose?: boolean
+  onClose?: () => void
 }) {
   const exp = card.profile.currentExperience
   const expLine = exp?.neighborhood
@@ -164,9 +184,19 @@ function ProfileHoverCard({
         }}
       />
 
-      <div className="p-3.5">
+      <div className="p-3.5 relative">
+        {showClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute top-2.5 right-2.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={13} />
+          </button>
+        )}
+
         {/* Header row */}
-        <div className="flex items-center gap-2.5 mb-2">
+        <div className={`flex items-center gap-2.5 mb-2 ${showClose ? 'pr-5' : ''}`}>
           <div className={`relative w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center text-white font-bold text-sm shrink-0 ${avatarColor(card.profile.full_name)}`}>
             {card.profile.photo_url
               ? <Image src={card.profile.photo_url} alt={card.profile.full_name} fill className="object-cover" unoptimized />
@@ -192,14 +222,13 @@ function ProfileHoverCard({
           </div>
         </div>
 
-        {/* Experience line */}
         {expLine && (
           <p className="text-xs text-muted-foreground mb-2.5 truncate">{expLine}</p>
         )}
 
-        {/* CTA */}
+        {/* ?from=map so the profile page can show "← Back to map" */}
         <Link
-          href={`/profile/${card.profile.id}`}
+          href={`/profile/${card.profile.id}?from=map`}
           className="flex items-center justify-between w-full text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
         >
           <span>View profile</span>
@@ -228,7 +257,10 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const [mapBounds, setMapBounds] = useState<mapboxgl.LngLatBounds | null>(null)
   const [offScreen, setOffScreen] = useState<OffScreenIndicator[]>([])
   const [zoomLevel, setZoomLevel] = useState(INITIAL_ZOOM)
+  // hoverCard: lightweight preview shown while hovering over a single-person marker
   const [hoverCard, setHoverCard] = useState<HoverCard | null>(null)
+  // clickCard: persistent card shown after clicking a marker; stays until dismissed
+  const [clickCard, setClickCard] = useState<HoverCard | null>(null)
 
   // Group profiles by city for the current week
   const cityGroups = useMemo((): CityGroup[] => {
@@ -279,7 +311,10 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
       setZoomLevel(map.current.getZoom())
     }
-    const dismiss = () => setHoverCard(null)
+    const dismiss = () => {
+      setHoverCard(null)
+      setClickCard(null)
+    }
     update()
     map.current.on('moveend', update)
     map.current.on('zoomend', update)
@@ -319,10 +354,13 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
 
     m.addSource('classmates', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
+    // ── Aggregate circles (zoom < SPLIT_ZOOM) ──────────────────────────────
     m.addLayer({
-      id: 'classmate-circles',
+      id: 'classmate-circles-group',
       type: 'circle',
       source: 'classmates',
+      maxzoom: SPLIT_ZOOM,
+      filter: ['==', ['get', 'featureType'], 'group'],
       paint: {
         'circle-radius': ['get', 'radius'],
         'circle-color': ['case', ['get', 'allVisitors'], '#0ea5e9', '#8C1515'],
@@ -330,23 +368,57 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         'circle-stroke-color': '#ffffff',
       },
     })
-
     m.addLayer({
-      id: 'classmate-labels',
+      id: 'classmate-labels-group',
       type: 'symbol',
       source: 'classmates',
+      maxzoom: SPLIT_ZOOM,
+      filter: ['==', ['get', 'featureType'], 'group'],
       layout: {
         'text-field': ['get', 'label'],
         'text-size': 12,
-        'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
         'text-allow-overlap': true,
         'text-ignore-placement': true,
       },
       paint: { 'text-color': '#ffffff' },
     })
 
-    m.on('mouseenter', 'classmate-circles', () => { m.getCanvas().style.cursor = 'pointer' })
-    m.on('mouseleave', 'classmate-circles', () => { m.getCanvas().style.cursor = '' })
+    // ── Individual circles (zoom >= SPLIT_ZOOM) ────────────────────────────
+    m.addLayer({
+      id: 'classmate-circles-individual',
+      type: 'circle',
+      source: 'classmates',
+      minzoom: SPLIT_ZOOM,
+      filter: ['==', ['get', 'featureType'], 'individual'],
+      paint: {
+        'circle-radius': 16,
+        'circle-color': ['case', ['get', 'isVisitor'], '#0ea5e9', '#8C1515'],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+      },
+    })
+    m.addLayer({
+      id: 'classmate-labels-individual',
+      type: 'symbol',
+      source: 'classmates',
+      minzoom: SPLIT_ZOOM,
+      filter: ['==', ['get', 'featureType'], 'individual'],
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-size': 11,
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: { 'text-color': '#ffffff' },
+    })
+
+    // Cursor pointer on hover
+    ;(['classmate-circles-group', 'classmate-circles-individual'] as const).forEach(id => {
+      m.on('mouseenter', id, () => { m.getCanvas().style.cursor = 'pointer' })
+      m.on('mouseleave', id, () => { m.getCanvas().style.cursor = '' })
+    })
   }, [mapLoaded])
 
   // ── Update GL source data when city groups change ─────────────────────────
@@ -355,7 +427,8 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     const source = map.current.getSource('classmates') as mapboxgl.GeoJSONSource
     if (!source) return
 
-    const features = cityGroups.map(group => {
+    // One aggregate feature per city
+    const groupFeatures = cityGroups.map(group => {
       const count = group.profiles.length
       const residentCount = group.profiles.filter(p => !isVisitorExperience(p.currentExperience)).length
       const allVisitors = residentCount === 0
@@ -365,11 +438,36 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       return {
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [group.lng, group.lat] },
-        properties: { city: group.city, count, allVisitors, label, radius: Math.max(18, 14 + count * 2) },
+        properties: {
+          featureType: 'group',
+          city: group.city,
+          count,
+          allVisitors,
+          label,
+          radius: Math.max(18, 14 + count * 2),
+        },
       }
     })
 
-    source.setData({ type: 'FeatureCollection', features })
+    // One feature per person, spread in a ring around the city center
+    const individualFeatures = cityGroups.flatMap(group =>
+      group.profiles.map((profile, idx) => {
+        const [sLng, sLat] = spreadCoords(group.lng, group.lat, idx, group.profiles.length)
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [sLng, sLat] },
+          properties: {
+            featureType: 'individual',
+            profileId: profile.id,
+            city: group.city,
+            isVisitor: isVisitorExperience(profile.currentExperience),
+            label: getInitials(profile.full_name),
+          },
+        }
+      })
+    )
+
+    source.setData({ type: 'FeatureCollection', features: [...groupFeatures, ...individualFeatures] })
   }, [cityGroups, mapLoaded])
 
   // ── GL click + hover handlers ─────────────────────────────────────────────
@@ -377,19 +475,43 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     if (!mapLoaded || !map.current) return
     const m = map.current
 
-    const handleClick = (e: mapboxgl.MapLayerMouseEvent) => {
+    // Click on aggregate circle: open city panel (multi) or profile card (single)
+    const handleGroupClick = (e: mapboxgl.MapLayerMouseEvent) => {
       const props = e.features?.[0]?.properties
       if (!props) return
       const group = cityGroupsRef.current.find(g => g.city.toLowerCase() === props.city.toLowerCase())
       if (!group) return
       if (group.profiles.length === 1) {
-        window.location.href = `/profile/${group.profiles[0].id}`
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const coords = (e.features![0].geometry as any).coordinates as [number, number]
+        const proj = m.project(coords)
+        setClickCard({ profile: group.profiles[0], x: proj.x, y: proj.y, above: proj.y > 160 })
+        setHoverCard(null)
       } else {
         setSelectedCity(group)
+        setClickCard(null)
       }
     }
 
-    const handleMousemove = (e: mapboxgl.MapLayerMouseEvent) => {
+    // Click on individual circle: open profile card
+    const handleIndividualClick = (e: mapboxgl.MapLayerMouseEvent) => {
+      const props = e.features?.[0]?.properties
+      if (!props?.profileId) return
+      let found: (MapProfile & { currentExperience?: ExperienceSnippet }) | undefined
+      for (const group of cityGroupsRef.current) {
+        found = group.profiles.find(p => p.id === props.profileId)
+        if (found) break
+      }
+      if (!found) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const coords = (e.features![0].geometry as any).coordinates as [number, number]
+      const proj = m.project(coords)
+      setClickCard({ profile: found, x: proj.x, y: proj.y, above: proj.y > 160 })
+      setHoverCard(null)
+    }
+
+    // Hover over aggregate circle: lightweight preview for single-person cities
+    const handleGroupMousemove = (e: mapboxgl.MapLayerMouseEvent) => {
       if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
       const feature = e.features?.[0]
       if (!feature?.properties || feature.properties.count > 1) { setHoverCard(null); return }
@@ -401,20 +523,52 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setHoverCard({ profile: group.profiles[0], x: proj.x, y: proj.y, above: proj.y > 160 })
     }
 
+    // Hover over individual circle: lightweight preview
+    const handleIndividualMousemove = (e: mapboxgl.MapLayerMouseEvent) => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+      const feature = e.features?.[0]
+      if (!feature?.properties?.profileId) return
+      let found: (MapProfile & { currentExperience?: ExperienceSnippet }) | undefined
+      for (const group of cityGroupsRef.current) {
+        found = group.profiles.find(p => p.id === feature.properties!.profileId)
+        if (found) break
+      }
+      if (!found) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const coords = (feature.geometry as any).coordinates as [number, number]
+      const proj = m.project(coords)
+      setHoverCard({ profile: found, x: proj.x, y: proj.y, above: proj.y > 160 })
+    }
+
     const handleMouseleave = () => {
       hoverTimeout.current = setTimeout(() => setHoverCard(null), 160)
     }
 
-    m.on('click', 'classmate-circles', handleClick)
-    m.on('mousemove', 'classmate-circles', handleMousemove)
-    m.on('mouseleave', 'classmate-circles', handleMouseleave)
+    m.on('click', 'classmate-circles-group', handleGroupClick)
+    m.on('click', 'classmate-circles-individual', handleIndividualClick)
+    m.on('mousemove', 'classmate-circles-group', handleGroupMousemove)
+    m.on('mousemove', 'classmate-circles-individual', handleIndividualMousemove)
+    m.on('mouseleave', 'classmate-circles-group', handleMouseleave)
+    m.on('mouseleave', 'classmate-circles-individual', handleMouseleave)
 
     return () => {
-      m.off('click', 'classmate-circles', handleClick)
-      m.off('mousemove', 'classmate-circles', handleMousemove)
-      m.off('mouseleave', 'classmate-circles', handleMouseleave)
+      m.off('click', 'classmate-circles-group', handleGroupClick)
+      m.off('click', 'classmate-circles-individual', handleIndividualClick)
+      m.off('mousemove', 'classmate-circles-group', handleGroupMousemove)
+      m.off('mousemove', 'classmate-circles-individual', handleIndividualMousemove)
+      m.off('mouseleave', 'classmate-circles-group', handleMouseleave)
+      m.off('mouseleave', 'classmate-circles-individual', handleMouseleave)
     }
   }, [mapLoaded])
+
+  // ── Escape key dismisses pinned card and city panel ───────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setClickCard(null); setSelectedCity(null) }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // ── Playback ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -425,6 +579,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     }, 800)
     return () => clearInterval(interval)
   }, [playing, weekIndex, setWeekIndex])
+
+  // zoomLevel is read by TypeScript; suppress the unused-var warning by referencing it
+  void zoomLevel
 
   const activeCount = cityGroups.reduce((s, g) => s + g.profiles.length, 0)
 
@@ -454,12 +611,23 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </button>
       ))}
 
-      {/* ── Hover profile card ───────────────────────────────────────────── */}
-      {hoverCard && (
+      {/* ── Hover preview card (suppressed when a click card is pinned) ─── */}
+      {hoverCard && !clickCard && (
         <ProfileHoverCard
           card={hoverCard}
           onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current) }}
           onMouseLeave={() => setHoverCard(null)}
+        />
+      )}
+
+      {/* ── Pinned profile card (shown on click, dismissed explicitly) ───── */}
+      {clickCard && (
+        <ProfileHoverCard
+          card={clickCard}
+          onMouseEnter={() => {}}
+          onMouseLeave={() => {}}
+          showClose
+          onClose={() => setClickCard(null)}
         />
       )}
 
@@ -526,7 +694,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </div>
       </div>
 
-      {/* ── City detail popup (cluster mode) ────────────────────────────── */}
+      {/* ── City detail popup (multi-person cluster) ─────────────────────── */}
       {selectedCity && (
         <div className="absolute top-4 right-4 w-72 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-10">
           <div className="p-4 border-b border-border flex items-center justify-between gap-2">
@@ -555,8 +723,11 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
             {selectedCity.profiles.map(profile => {
               const visiting = isVisitorExperience(profile.currentExperience)
               return (
-                <Link key={profile.id} href={`/profile/${profile.id}`}
-                  className="flex items-center gap-3 p-3 hover:bg-accent transition-colors">
+                <Link
+                  key={profile.id}
+                  href={`/profile/${profile.id}?from=map`}
+                  className="flex items-center gap-3 p-3 hover:bg-accent transition-colors"
+                >
                   <div className={`relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-semibold shrink-0 ${avatarColor(profile.full_name)}`}>
                     {profile.photo_url
                       ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />

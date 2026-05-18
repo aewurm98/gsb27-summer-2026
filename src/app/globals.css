@@ -83,9 +83,18 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
 }
 
+/* Ensure all form controls and buttons inherit the app font */
+input, textarea, select, button, optgroup {
+  font-family: inherit;
+  font-size: inherit;
+}
+
 /* Mapbox overrides */
 .mapboxgl-ctrl-logo,
 .mapboxgl-ctrl-attrib { display: none !important; }
+
+/* Mapbox control buttons use app font */
+.mapboxgl-ctrl button { font-family: var(--font-inter), system-ui, sans-serif; }
 
 .mapboxgl-popup-content {
   border-radius: 12px;
