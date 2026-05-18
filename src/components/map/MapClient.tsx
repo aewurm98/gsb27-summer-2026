@@ -263,7 +263,10 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       attributionControl: false,
-      renderWorldCopies: false,
+      // maxBounds prevents the user from panning far enough to reach a world-copy
+      // position for any marker, eliminating ghost duplicates without the marker-
+      // projection distortion that renderWorldCopies:false causes in Mapbox GL v3.
+      maxBounds: [[-220, -80], [220, 80]],
     })
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     map.current.on('load', () => setMapLoaded(true))
