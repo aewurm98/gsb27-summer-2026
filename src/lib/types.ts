@@ -95,5 +95,5 @@ export interface MapboxFeature {
 
 // Summer 2026 window
 export const SUMMER_START = new Date('2026-06-01')
-export const SUMMER_END   = new Date('2026-09-14')
-export const SUMMER_WEEKS = 16
+export const SUMMER_END   = new Date('2026-09-28') // Jun 1 + 17 weeks
+export const SUMMER_WEEKS = 17

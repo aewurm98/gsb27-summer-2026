@@ -689,7 +689,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
 
           <div className="flex justify-between mt-1">
             <span className="text-xs text-muted-foreground">Jun 1</span>
-            <span className="text-xs text-muted-foreground">Sep 14</span>
+            <span className="text-xs text-muted-foreground">{weeks[weeks.length - 1].endLabel}</span>
           </div>
         </div>
       </div>

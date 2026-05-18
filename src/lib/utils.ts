@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { addWeeks, isWithinInterval, parseISO, format } from 'date-fns'
+import { addWeeks, addDays, isSameMonth, isWithinInterval, parseISO, format } from 'date-fns'
 import { Location, Profile, TravelInterest, SUMMER_START, SUMMER_WEEKS } from './types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -11,12 +11,17 @@ export function getSummerWeeks() {
   return Array.from({ length: SUMMER_WEEKS }, (_, i) => {
     const weekStart = addWeeks(SUMMER_START, i)
     const weekEnd = addWeeks(SUMMER_START, i + 1)
+    const lastDay = addDays(weekEnd, -1)
+    const dateLabel = isSameMonth(weekStart, lastDay)
+      ? `${format(weekStart, 'MMM d')}–${format(lastDay, 'd')}`
+      : `${format(weekStart, 'MMM d')}–${format(lastDay, 'MMM d')}`
     return {
       index: i,
       label: `Week ${i + 1}`,
       start: weekStart,
       end: weekEnd,
-      dateLabel: format(weekStart, 'MMM d'),
+      dateLabel,
+      endLabel: format(lastDay, 'MMM d'),
     }
   })
 }
