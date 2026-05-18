@@ -263,11 +263,6 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       attributionControl: false,
-      // Mapbox GL JS v3 defaults to globe projection, which has an open bug
-      // (github.com/mapbox/mapbox-gl-js/issues/12592) where DOM markers are
-      // displaced by 8–10° during the globe→Mercator transition at zoom ~5.7.
-      // Forcing Mercator restores v2 behavior and pins markers correctly.
-      projection: 'mercator',
     })
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     map.current.on('load', () => setMapLoaded(true))
