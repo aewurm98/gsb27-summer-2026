@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
   if (!token) return NextResponse.json({ error: 'Mapbox token missing' }, { status: 500 })
 
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?types=place,locality,neighborhood&limit=6&access_token=${token}`
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?types=place,locality&limit=6&access_token=${token}`
 
   const res = await fetch(url)
   if (!res.ok) return NextResponse.json([])

@@ -53,6 +53,15 @@ const INITIAL_ZOOM = 4
 // At/above SPLIT_ZOOM: individual circles spread around the city center.
 const SPLIT_ZOOM = 9
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 /**
  * Fans N profiles in a ring around (baseLng, baseLat).
  * 0.02° ≈ 2.2 km; circles visually separate by zoom 11.
@@ -282,7 +291,27 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         },
       })
     })
-    return Array.from(cityMap.values())
+
+    // Merge groups within 12 km of each other — fixes users who stored a
+    // neighborhood name instead of the city (e.g. "Financial District" vs
+    // "San Francisco"). 12 km keeps distinct nearby cities (Oakland, Daly City)
+    // separate while collapsing any in-city variation.
+    const groups = Array.from(cityMap.values())
+    const merged: CityGroup[] = []
+    for (const group of groups) {
+      const nearby = merged.find(m => haversineKm(m.lat, m.lng, group.lat, group.lng) < 12)
+      if (nearby) {
+        if (group.profiles.length > nearby.profiles.length) {
+          nearby.city = group.city
+          nearby.lat = group.lat
+          nearby.lng = group.lng
+        }
+        nearby.profiles.push(...group.profiles)
+      } else {
+        merged.push({ ...group, profiles: [...group.profiles] })
+      }
+    }
+    return merged
   }, [profiles, weekIndex])
 
   cityGroupsRef.current = cityGroups
