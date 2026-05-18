@@ -277,20 +277,24 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
       setZoomLevel(map.current.getZoom())
     }
+    const hideMarkers = () => mapContainer.current?.classList.add('markers-hidden')
     const snapZoom = () => {
       if (!map.current) return
       const z = map.current.getZoom()
       const snapped = Math.round(z)
       if (z !== snapped) map.current.jumpTo({ zoom: snapped })
+      mapContainer.current?.classList.remove('markers-hidden')
       update()
     }
     const dismiss = () => setHoverCard(null)
     update()
     map.current.on('moveend', update)
+    map.current.on('zoomstart', hideMarkers)
     map.current.on('zoomend', snapZoom)
     map.current.on('movestart', dismiss)
     return () => {
       map.current?.off('moveend', update)
+      map.current?.off('zoomstart', hideMarkers)
       map.current?.off('zoomend', snapZoom)
       map.current?.off('movestart', dismiss)
     }

@@ -103,3 +103,6 @@ body {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+/* Hide map markers during zoom to prevent globe projection drift */
+.markers-hidden .mapboxgl-marker { visibility: hidden; }
