@@ -6,7 +6,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, avatarColorHex, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, Maximize2, Home, Plane } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
@@ -277,13 +277,15 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       setMapSize({ w: mapContainer.current.offsetWidth, h: mapContainer.current.offsetHeight })
       setZoomLevel(map.current.getZoom())
     }
-    const hideMarkers = () => mapContainer.current?.classList.add('markers-hidden')
+    const hideMarkers = () => {
+      markersRef.current.forEach(m => { m.getElement().style.visibility = 'hidden' })
+    }
     const snapZoom = () => {
       if (!map.current) return
       const z = map.current.getZoom()
       const snapped = Math.round(z)
       if (z !== snapped) map.current.jumpTo({ zoom: snapped })
-      mapContainer.current?.classList.remove('markers-hidden')
+      markersRef.current.forEach(m => { m.getElement().style.visibility = '' })
       update()
     }
     const dismiss = () => setHoverCard(null)
@@ -635,28 +637,30 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       )}
 
       {/* ── Hint + legend + reset button ────────────────────────────────── */}
-      <div className="absolute top-4 left-4 flex flex-col gap-2">
-        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
-          {zoomLevel >= SPLIT_ZOOM
-            ? 'Hover to preview · Click to view profile'
-            : 'Click a marker to see classmates · Drag to explore'}
-        </div>
-        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full bg-primary shrink-0" />
-            Based
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full bg-sky-500 shrink-0" />
-            Visiting
-          </span>
+      <div className="absolute top-4 left-4 flex items-start gap-2">
+        <div className="flex flex-col gap-1.5">
+          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
+            {zoomLevel >= SPLIT_ZOOM
+              ? 'Hover to preview · Click to view profile'
+              : 'Click a marker to see classmates · Drag to explore'}
+          </div>
+          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
+              Based
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+              Visiting
+            </span>
+          </div>
         </div>
         <button
           onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}
           className="rounded-xl border border-border bg-card/90 backdrop-blur-sm p-2 text-muted-foreground hover:text-foreground hover:bg-card transition"
-          title="Reset view"
+          title="Return to default view"
         >
-          <Maximize2 size={13} />
+          <RotateCcw size={13} />
         </button>
       </div>
     </div>
