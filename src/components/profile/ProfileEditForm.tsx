@@ -135,6 +135,7 @@ export function ProfileEditForm({
   const [openToVisit, setOpenToVisit] = useState(profile?.open_to_visit ?? false)
   const [photoUrl, setPhotoUrl] = useState(profile?.photo_url ?? '')
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
 
   const [locations, setLocations] = useState<LocationDraft[]>(
     profile?.locations?.length
@@ -230,6 +231,7 @@ export function ProfileEditForm({
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    setPhotoError(null)
     setUploadingPhoto(true)
     try {
       // Resize + compress to JPEG ≤ 400 px before upload.
@@ -245,6 +247,7 @@ export function ProfileEditForm({
       setPhotoUrl(`${data.publicUrl}?t=${Date.now()}`)
     } catch (err: unknown) {
       console.error(err)
+      setPhotoError('Upload failed. Please try a smaller image or try again.')
     } finally {
       setUploadingPhoto(false)
     }
@@ -279,6 +282,21 @@ export function ProfileEditForm({
   }
 
   async function handleSave() {
+    const dateErrors: string[] = []
+    locations.forEach((loc, i) => {
+      if (loc.start_date && loc.end_date && loc.end_date < loc.start_date) {
+        dateErrors.push(`Location ${i + 1}: end date is before start date`)
+      }
+    })
+    interests.forEach((int, i) => {
+      if (int.interest_start_date && int.interest_end_date && int.interest_end_date < int.interest_start_date) {
+        dateErrors.push(`Travel interest ${i + 1}: end date is before start date`)
+      }
+    })
+    if (dateErrors.length > 0) {
+      setError(dateErrors.join(' · '))
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -409,13 +427,18 @@ export function ProfileEditForm({
               : getInitials(fullName || '?')
             }
           </div>
-          <label className="cursor-pointer">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm hover:bg-accent transition">
-              {uploadingPhoto ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {uploadingPhoto ? 'Uploading…' : 'Upload photo'}
-            </div>
-            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-          </label>
+          <div className="flex flex-col gap-1">
+            <label className="cursor-pointer">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm hover:bg-accent transition">
+                {uploadingPhoto ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {uploadingPhoto ? 'Uploading…' : 'Upload photo'}
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+            </label>
+            {photoError && (
+              <p className="text-xs text-destructive">{photoError}</p>
+            )}
+          </div>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-3">

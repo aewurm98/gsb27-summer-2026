@@ -71,7 +71,7 @@ export default async function TreksPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight">Group Treks</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Admin-organized adventures. Signal your interest and we'll coordinate.
+          Classmate-organized adventures. Signal interest in destinations and step up to lead a trek.
         </p>
       </div>
       <TreksClient

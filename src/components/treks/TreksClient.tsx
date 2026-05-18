@@ -335,11 +335,6 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
               {' '}— when 3+ classmates share a destination, it appears here as a suggested trek and anyone can step up as group lead.
             </p>
           </div>
-          {isAdmin && (
-            <button onClick={() => setShowCreateForm(true)} className="mt-2 text-sm text-primary hover:underline">
-              + Create a trek (admin)
-            </button>
-          )}
         </div>
       ) : (
         <div className="space-y-4">
