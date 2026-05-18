@@ -6,7 +6,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, avatarColorHex, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, Maximize2, Home, Plane } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
@@ -263,10 +263,6 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       attributionControl: false,
-      // maxBounds prevents the user from panning far enough to reach a world-copy
-      // position for any marker, eliminating ghost duplicates without the marker-
-      // projection distortion that renderWorldCopies:false causes in Mapbox GL v3.
-      maxBounds: [[-220, -80], [220, 80]],
     })
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     map.current.on('load', () => setMapLoaded(true))
@@ -316,7 +312,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
 
   // ── Markers ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!map.current) return
+    if (!map.current || !mapLoaded) return
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
@@ -454,7 +450,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     return () => {
       if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
     }
-  }, [cityGroups, zoomLevel])
+  }, [cityGroups, zoomLevel, mapLoaded])
 
   // ── Playback ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -649,9 +645,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         <button
           onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}
           className="rounded-xl border border-border bg-card/90 backdrop-blur-sm p-2 text-muted-foreground hover:text-foreground hover:bg-card transition"
-          title="Reset view"
+          title="Return to default view"
         >
-          <Maximize2 size={13} />
+          <RotateCcw size={13} />
         </button>
       </div>
     </div>
