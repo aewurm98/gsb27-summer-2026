@@ -6,7 +6,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, avatarColorHex, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, Maximize2, Home, Plane } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
@@ -311,17 +311,14 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   }, [cityGroups, mapBounds, mapSize])
 
   // ── Markers ──────────────────────────────────────────────────────────────
-  // isSplit drives whether we render cluster bubbles or individual avatars.
-  // It's derived here so the effect only re-runs when the mode CROSSES the
-  // threshold (not on every zoom tick), avoiding constant marker teardown.
-  const isSplit = zoomLevel >= SPLIT_ZOOM
-
   useEffect(() => {
-    if (!map.current || !mapLoaded) return
+    if (!map.current) return
     markersRef.current.forEach(m => m.remove())
     markersRef.current = []
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
     setHoverCard(null)
+
+    const isSplit = zoomLevel >= SPLIT_ZOOM
 
     cityGroups.forEach(group => {
       if (isSplit) {
@@ -453,7 +450,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     return () => {
       if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
     }
-  }, [cityGroups, isSplit, mapLoaded])
+  }, [cityGroups, zoomLevel])
 
   // ── Playback ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -627,30 +624,28 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       )}
 
       {/* ── Hint + legend + reset button ────────────────────────────────── */}
-      <div className="absolute top-4 left-4 flex items-start gap-2">
-        <div className="flex flex-col gap-1.5">
-          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
-            {zoomLevel >= SPLIT_ZOOM
-              ? 'Hover to preview · Click to view profile'
-              : 'Click a marker to see classmates · Drag to explore'}
-          </div>
-          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
-              Based
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
-              Visiting
-            </span>
-          </div>
+      <div className="absolute top-4 left-4 flex flex-col gap-2">
+        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
+          {zoomLevel >= SPLIT_ZOOM
+            ? 'Hover to preview · Click to view profile'
+            : 'Click a marker to see classmates · Drag to explore'}
+        </div>
+        <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-primary shrink-0" />
+            Based
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-sky-500 shrink-0" />
+            Visiting
+          </span>
         </div>
         <button
           onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}
           className="rounded-xl border border-border bg-card/90 backdrop-blur-sm p-2 text-muted-foreground hover:text-foreground hover:bg-card transition"
-          title="Return to default view"
+          title="Reset view"
         >
-          <RotateCcw size={13} />
+          <Maximize2 size={13} />
         </button>
       </div>
     </div>
