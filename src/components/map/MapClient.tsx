@@ -314,7 +314,35 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     return merged
   }, [profiles, weekIndex])
 
-  cityGroupsRef.current = cityGroups
+  // Zoom-adaptive visual clustering: merge city groups whose bubbles would
+  // overlap on screen. Uses a 40 px collision diameter converted to ground km
+  // at the current (floored) zoom, capped at 60 km so SF and San Jose (79 km)
+  // remain distinct. Below SPLIT_ZOOM this is the render source; at/above
+  // SPLIT_ZOOM individual rings take over and no merging is needed.
+  const displayGroups = useMemo((): CityGroup[] => {
+    const z = Math.floor(zoomLevel)
+    if (z >= SPLIT_ZOOM) return cityGroups
+    const mpp = (156543 * Math.cos(37.5 * Math.PI / 180)) / Math.pow(2, z)
+    const mergeKm = Math.min(60, Math.max(12, (40 * mpp) / 1000))
+    const merged: CityGroup[] = []
+    for (const group of cityGroups) {
+      const nearby = merged.find(m => haversineKm(m.lat, m.lng, group.lat, group.lng) < mergeKm)
+      if (nearby) {
+        if (group.profiles.length > nearby.profiles.length) {
+          nearby.city = group.city
+          nearby.lat = group.lat
+          nearby.lng = group.lng
+        }
+        nearby.profiles.push(...group.profiles)
+      } else {
+        merged.push({ ...group, profiles: [...group.profiles] })
+      }
+    }
+    return merged
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityGroups, Math.floor(zoomLevel)])
+
+  cityGroupsRef.current = displayGroups
 
   // ── Map init ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -362,7 +390,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     const cx = mapSize.w / 2, cy = mapSize.h / 2
     const raw: OffScreenIndicator[] = []
 
-    for (const group of cityGroups) {
+    for (const group of displayGroups) {
       try {
         if (mapBounds.contains([group.lng, group.lat])) continue
         const proj = map.current.project([group.lng, group.lat])
@@ -374,7 +402,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
 
     raw.sort((a, b) => b.profiles.length - a.profiles.length)
     setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD))
-  }, [cityGroups, mapBounds, mapSize])
+  }, [displayGroups, mapBounds, mapSize])
 
   // ── GL source + layers (once after map loads) ────────────────────────────
   useEffect(() => {
@@ -456,8 +484,8 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     const source = map.current.getSource('classmates') as mapboxgl.GeoJSONSource
     if (!source) return
 
-    // One aggregate feature per city
-    const groupFeatures = cityGroups.map(group => {
+    // One aggregate feature per city (zoom-adaptive merged groups)
+    const groupFeatures = displayGroups.map(group => {
       const count = group.profiles.length
       const residentCount = group.profiles.filter(p => !isVisitorExperience(p.currentExperience)).length
       const allVisitors = residentCount === 0
@@ -478,7 +506,8 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       }
     })
 
-    // One feature per person, spread in a ring around the city center
+    // One feature per person, spread in a ring (uses cityGroups so rings reflect
+    // actual city membership, not the zoom-merged display groups)
     const individualFeatures = cityGroups.flatMap(group =>
       group.profiles.map((profile, idx) => {
         const [sLng, sLat] = spreadCoords(group.lng, group.lat, idx, group.profiles.length)
@@ -497,7 +526,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     )
 
     source.setData({ type: 'FeatureCollection', features: [...groupFeatures, ...individualFeatures] })
-  }, [cityGroups, mapLoaded])
+  }, [displayGroups, cityGroups, mapLoaded])
 
   // ── GL click + hover handlers ─────────────────────────────────────────────
   useEffect(() => {
@@ -608,9 +637,6 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     }, 800)
     return () => clearInterval(interval)
   }, [playing, weekIndex, setWeekIndex])
-
-  // zoomLevel is read by TypeScript; suppress the unused-var warning by referencing it
-  void zoomLevel
 
   const activeCount = cityGroups.reduce((s, g) => s + g.profiles.length, 0)
 
