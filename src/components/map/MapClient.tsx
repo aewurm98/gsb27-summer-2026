@@ -859,7 +859,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
                   map.current?.flyTo({ center: [selectedCity.lng, selectedCity.lat], zoom: SPLIT_ZOOM + 1, duration: 1200, essential: true })
                   setSelectedCity(null)
                 }}
-                className="text-xs px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 font-medium transition"
+                className="text-xs px-2 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 font-medium transition"
                 title="Zoom in to see individuals"
               >
                 Zoom in

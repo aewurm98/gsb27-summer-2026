@@ -212,7 +212,7 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                className={`px-2 py-0.5 rounded-full text-xs font-medium border transition ${
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary'
                     : isMyTag
