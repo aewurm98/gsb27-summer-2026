@@ -32,6 +32,7 @@ interface CityGroup {
   lat: number
   lng: number
   profiles: Array<MapProfile & { currentExperience?: ExperienceSnippet }>
+  subGroups?: CityGroup[]  // populated when multiple cities were zoom-merged
 }
 
 interface OffScreenIndicator extends CityGroup {
@@ -258,6 +259,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const { weekIndex, setWeekIndex } = useMapStore()
   const [playing, setPlaying] = useState(false)
   const [selectedCity, setSelectedCity] = useState<CityGroup | null>(null)
+  const [mergedCluster, setMergedCluster] = useState<CityGroup | null>(null)
   const [showWeekPicker, setShowWeekPicker] = useState(false)
   const weeks = getSummerWeeks()
 
@@ -322,18 +324,29 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const displayGroups = useMemo((): CityGroup[] => {
     const z = Math.floor(zoomLevel)
     if (z >= SPLIT_ZOOM) return cityGroups
-    const mpp = (156543 * Math.cos(37.5 * Math.PI / 180)) / Math.pow(2, z)
-    const mergeKm = Math.min(60, Math.max(12, (40 * mpp) / 1000))
+    // Tiered merge thresholds: each step doubles, tuned so SF+PA (44 km) merge
+    // at zoom ≤ 6 and separate at zoom 7. 400 km cap at global view keeps
+    // continent-level cities (SF, NYC, London) distinct even at zoom 2-3.
+    const mergeKm = z <= 3 ? 400 : z === 4 ? 150 : z === 5 ? 80 : z === 6 ? 55 : 12
     const merged: CityGroup[] = []
     for (const group of cityGroups) {
       const nearby = merged.find(m => haversineKm(m.lat, m.lng, group.lat, group.lng) < mergeKm)
       if (nearby) {
-        if (group.profiles.length > nearby.profiles.length) {
-          nearby.city = group.city
-          nearby.lat = group.lat
-          nearby.lng = group.lng
+        // Snapshot this group's original position as a sub-group before centroid shifts
+        if (!nearby.subGroups) {
+          nearby.subGroups = [{ city: nearby.city, lat: nearby.lat, lng: nearby.lng, profiles: [...nearby.profiles] }]
         }
+        // Weighted centroid
+        const w1 = nearby.profiles.length, w2 = group.profiles.length
+        nearby.lat = (nearby.lat * w1 + group.lat * w2) / (w1 + w2)
+        nearby.lng = (nearby.lng * w1 + group.lng * w2) / (w1 + w2)
+        nearby.subGroups.push({ city: group.city, lat: group.lat, lng: group.lng, profiles: [...group.profiles] })
         nearby.profiles.push(...group.profiles)
+        // Combined city name: largest first
+        const sorted = [...nearby.subGroups].sort((a, b) => b.profiles.length - a.profiles.length)
+        nearby.city = sorted.length === 2
+          ? `${sorted[0].city} + ${sorted[1].city}`
+          : `${sorted[0].city} + ${sorted.length - 1} more`
       } else {
         merged.push({ ...group, profiles: [...group.profiles] })
       }
@@ -419,7 +432,12 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       maxzoom: SPLIT_ZOOM,
       filter: ['==', ['get', 'featureType'], 'group'],
       paint: {
-        'circle-radius': ['get', 'radius'],
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          2, ['*', ['get', 'radius'], 0.45],
+          4, ['*', ['get', 'radius'], 0.7],
+          7, ['get', 'radius'],
+        ],
         'circle-color': ['case', ['get', 'allVisitors'], '#0ea5e9', '#8C1515'],
         'circle-stroke-width': 3,
         'circle-stroke-color': '#ffffff',
@@ -545,8 +563,13 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         const proj = m.project(coords)
         setClickCard({ profile: group.profiles[0], x: proj.x, y: proj.y, above: proj.y > 160 })
         setHoverCard(null)
+      } else if (group.subGroups && group.subGroups.length > 1) {
+        setMergedCluster(group)
+        setSelectedCity(null)
+        setClickCard(null)
       } else {
         setSelectedCity(group)
+        setMergedCluster(null)
         setClickCard(null)
       }
     }
@@ -622,7 +645,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   // ── Escape key dismisses pinned card and city panel ───────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setClickCard(null); setSelectedCity(null) }
+      if (e.key === 'Escape') { setClickCard(null); setSelectedCity(null); setMergedCluster(null) }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -748,6 +771,76 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           </div>
         </div>
       </div>
+
+      {/* ── Merged-cluster panel (multiple cities zoom-merged) ────────────── */}
+      {mergedCluster && !selectedCity && (
+        <div className="absolute top-4 right-4 w-72 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-10">
+          <div className="p-4 border-b border-border flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm truncate">{mergedCluster.city}</h3>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Users size={10} />
+                {mergedCluster.profiles.length} classmate{mergedCluster.profiles.length !== 1 ? 's' : ''} this week
+              </p>
+            </div>
+            <button onClick={() => setMergedCluster(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none shrink-0">×</button>
+          </div>
+          <div className="max-h-[28rem] overflow-y-auto">
+            {[...(mergedCluster.subGroups ?? [])].sort((a, b) => b.profiles.length - a.profiles.length).map(sub => (
+              <div key={sub.city}>
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/40 border-b border-border">
+                  <div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{sub.city}</span>
+                    <span className="ml-1.5 text-[11px] text-muted-foreground">· {sub.profiles.length}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      map.current?.flyTo({ center: [sub.lng, sub.lat], zoom: 8, duration: 1000, essential: true })
+                      setMergedCluster(null)
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 font-medium transition flex items-center gap-1"
+                  >
+                    Zoom in <ArrowRight size={10} />
+                  </button>
+                </div>
+                <div className="divide-y divide-border">
+                  {sub.profiles.map(profile => {
+                    const visiting = isVisitorExperience(profile.currentExperience)
+                    return (
+                      <Link
+                        key={profile.id}
+                        href={`/profile/${profile.id}?from=map`}
+                        className="flex items-center gap-3 p-3 hover:bg-accent transition-colors"
+                      >
+                        <div className={`relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-semibold shrink-0 ${avatarColor(profile.full_name)}`}>
+                          {profile.photo_url
+                            ? <Image src={profile.photo_url} alt={profile.full_name} fill className="object-cover" unoptimized />
+                            : getInitials(profile.full_name)
+                          }
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium truncate">{profile.full_name}</p>
+                            {visiting && (
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 font-medium">✈ visiting</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {profile.currentExperience?.neighborhood
+                              ? profile.currentExperience.neighborhood
+                              : [profile.currentExperience?.role, profile.currentExperience?.company].filter(Boolean).join(' @ ')
+                                || profile.currentExperience?.label || ''}
+                          </p>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── City detail popup (multi-person cluster) ─────────────────────── */}
       {selectedCity && (
