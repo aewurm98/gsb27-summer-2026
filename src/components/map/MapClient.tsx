@@ -434,8 +434,8 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       paint: {
         'circle-radius': [
           'interpolate', ['linear'], ['zoom'],
-          2, ['*', ['get', 'radius'], 0.45],
-          4, ['*', ['get', 'radius'], 0.7],
+          2, ['*', ['get', 'radius'], 0.5],
+          4, ['*', ['get', 'radius'], 0.8],
           7, ['get', 'radius'],
         ],
         'circle-color': ['case', ['get', 'allVisitors'], '#0ea5e9', '#8C1515'],
@@ -467,7 +467,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       minzoom: SPLIT_ZOOM,
       filter: ['==', ['get', 'featureType'], 'individual'],
       paint: {
-        'circle-radius': 16,
+        'circle-radius': 18,
         'circle-color': ['case', ['get', 'isVisitor'], '#0ea5e9', '#8C1515'],
         'circle-stroke-width': 2,
         'circle-stroke-color': '#ffffff',

@@ -193,7 +193,7 @@ export default async function ProfilePage({
               id: string; destination_city: string; destination_country: string
               notes: string | null; interest_start_date: string | null; interest_end_date: string | null
             }) => (
-              <div key={interest.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-sm">
+              <div key={interest.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent text-xs">
                 <Globe size={11} className="text-muted-foreground" />
                 <span>
                   {interest.destination_city}
