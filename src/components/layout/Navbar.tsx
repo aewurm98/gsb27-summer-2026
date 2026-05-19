@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Sun, Moon, Monitor, Map, Users, Plane, Shield, User, LogOut } from 'lucide-react'
+import { Sun, Moon, Monitor, Map, Users, Plane, Shield, User, LogOut, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Profile } from '@/lib/types'
 import { useState } from 'react'
@@ -35,6 +35,7 @@ export function Navbar({ profile }: { profile: Profile | null }) {
   const router = useRouter()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const themeIcons = { light: Sun, dark: Moon, system: Monitor }
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light'
@@ -49,6 +50,48 @@ export function Navbar({ profile }: { profile: Profile | null }) {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
+      {/* Mobile nav dropdown — portrait mode */}
+      {mobileNavOpen && (
+        <>
+          <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setMobileNavOpen(false)} />
+          <div className="absolute left-0 right-0 top-14 bg-card border-b border-border shadow-lg z-50 sm:hidden">
+            <div className="px-4 py-2 flex flex-col gap-0.5">
+              {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileNavOpen(false)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    (href === '/profile/edit' ? pathname === href || pathname.startsWith('/profile/edit') : pathname.startsWith(href))
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  )}
+                >
+                  <Icon size={16} />
+                  {label}
+                </Link>
+              ))}
+              {profile?.is_admin && (
+                <Link
+                  href="/admin"
+                  onClick={() => setMobileNavOpen(false)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    pathname.startsWith('/admin')
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  )}
+                >
+                  <Shield size={16} />
+                  Admin
+                </Link>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex h-14 items-center justify-between">
 
         {/* Logo */}
@@ -92,6 +135,15 @@ export function Navbar({ profile }: { profile: Profile | null }) {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
+          {/* Hamburger — visible only on mobile (portrait) */}
+          <button
+            onClick={() => setMobileNavOpen(o => !o)}
+            className="sm:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu size={18} />
+          </button>
+
           <button
             onClick={() => setTheme(nextTheme)}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

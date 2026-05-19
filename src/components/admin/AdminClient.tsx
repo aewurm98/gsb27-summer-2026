@@ -8,6 +8,7 @@ import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X,
 import Link from 'next/link'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
+import { useTheme } from 'next-themes'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
 type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name'> | undefined })[] }
@@ -26,6 +27,8 @@ export function AdminClient({ profiles, treks }: Props) {
   const [heatmapCitySort, setHeatmapCitySort] = useState<'count' | 'alpha'>('count')
   const router = useRouter()
   const supabase = createClient()
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
 
   // Profiles tab state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -651,8 +654,8 @@ export function AdminClient({ profiles, treks }: Props) {
                                 className="w-10 h-7 rounded flex items-center justify-center text-[10px] font-semibold shrink-0"
                                 title={`Week ${wi + 1}: ${count} interested`}
                                 style={count > 0 ? {
-                                  backgroundColor: `rgba(140,21,21,${Math.max(0.12, count / dest.maxCount * 0.85)})`,
-                                  color: count / dest.maxCount > 0.45 ? 'white' : '#8C1515',
+                                  backgroundColor: `rgba(${isDark ? '192,57,43' : '140,21,21'},${Math.max(isDark ? 0.2 : 0.12, count / dest.maxCount * 0.85)})`,
+                                  color: count / dest.maxCount > (isDark ? 0.25 : 0.45) ? 'white' : (isDark ? '#F07070' : '#8C1515'),
                                 } : { color: 'transparent' }}
                               >
                                 {count > 0 ? count : '·'}
@@ -713,8 +716,8 @@ export function AdminClient({ profiles, treks }: Props) {
                                   <span
                                     className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold"
                                     style={{
-                                      backgroundColor: `rgba(140,21,21,${Math.max(0.1, count / maxDensity * 0.82)})`,
-                                      color: count / maxDensity > 0.45 ? 'white' : '#8C1515',
+                                      backgroundColor: `rgba(${isDark ? '192,57,43' : '140,21,21'},${Math.max(isDark ? 0.2 : 0.1, count / maxDensity * 0.82)})`,
+                                      color: count / maxDensity > (isDark ? 0.25 : 0.45) ? 'white' : (isDark ? '#F07070' : '#8C1515'),
                                     }}
                                   >
                                     {count}
@@ -794,11 +797,11 @@ export function AdminClient({ profiles, treks }: Props) {
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           <div className="flex flex-wrap gap-1">
-                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded font-medium bg-rose-200 text-rose-900">no photo</span>}
-                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded font-medium bg-orange-200 text-orange-900">no locations</span>}
-                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded font-medium bg-amber-200 text-amber-900">no interests</span>}
-                            {!p.section && <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">no hometown</span>}
-                            {!(p.activity_tags?.length) && <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">no tags</span>}
+                            {!p.photo_url && <span className="px-1.5 py-0.5 rounded font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300">no photo</span>}
+                            {!(p.locations?.length) && <span className="px-1.5 py-0.5 rounded font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">no locations</span>}
+                            {!(p.travel_interests?.length) && <span className="px-1.5 py-0.5 rounded font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">no interests</span>}
+                            {!p.section && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300">no hometown</span>}
+                            {!(p.activity_tags?.length) && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300">no tags</span>}
                           </div>
                         </td>
                       </tr>

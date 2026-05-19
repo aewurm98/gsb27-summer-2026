@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import Image from 'next/image'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import { useTheme } from 'next-themes'
 import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
 import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane, X } from 'lucide-react'
@@ -50,6 +51,7 @@ interface HoverCard {
 
 const INITIAL_CENTER: [number, number] = [-100, 40]
 const INITIAL_ZOOM = 4
+const INITIAL_ZOOM_MOBILE = 2.5
 // Below SPLIT_ZOOM: one aggregate circle per city.
 // At/above SPLIT_ZOOM: individual circles spread around the city center.
 const SPLIT_ZOOM = 9
@@ -263,7 +265,13 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const [showWeekPicker, setShowWeekPicker] = useState(false)
   const weeks = getSummerWeeks()
 
+  const { resolvedTheme } = useTheme()
   const [mapLoaded, setMapLoaded] = useState(false)
+  // Increments each time the map style is (re-)applied so layer-dependent
+  // effects know to clean up and re-add their sources/layers.
+  const [styleVersion, setStyleVersion] = useState(0)
+  const initialZoomRef = useRef(INITIAL_ZOOM)
+  const currentMapStyle = useRef('')
   const [mapSize, setMapSize] = useState({ w: 0, h: 0 })
   const [mapBounds, setMapBounds] = useState<mapboxgl.LngLatBounds | null>(null)
   const [offScreen, setOffScreen] = useState<OffScreenIndicator[]>([])
@@ -361,16 +369,34 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   useEffect(() => {
     if (!mapContainer.current || map.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
+    const isMobile = window.innerWidth < 640
+    initialZoomRef.current = isMobile ? INITIAL_ZOOM_MOBILE : INITIAL_ZOOM
+    const style = resolvedTheme === 'dark'
+      ? 'mapbox://styles/mapbox/dark-v11'
+      : 'mapbox://styles/mapbox/light-v11'
+    currentMapStyle.current = style
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/light-v11',
+      style,
       center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
+      zoom: initialZoomRef.current,
       attributionControl: false,
     })
     map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     map.current.on('load', () => setMapLoaded(true))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Dark / light map style switch ─────────────────────────────────────────
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return
+    const newStyle = resolvedTheme === 'dark'
+      ? 'mapbox://styles/mapbox/dark-v11'
+      : 'mapbox://styles/mapbox/light-v11'
+    if (newStyle === currentMapStyle.current) return
+    currentMapStyle.current = newStyle
+    map.current.once('style.load', () => setStyleVersion(v => v + 1))
+    map.current.setStyle(newStyle)
+  }, [resolvedTheme, mapLoaded])
 
   // ── Track viewport + zoom ─────────────────────────────────────────────────
   useEffect(() => {
@@ -417,10 +443,15 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD))
   }, [displayGroups, mapBounds, mapSize])
 
-  // ── GL source + layers (once after map loads) ────────────────────────────
+  // ── GL source + layers — runs on initial load and after every style switch ─
   useEffect(() => {
     if (!mapLoaded || !map.current) return
     const m = map.current
+
+    // Clean up any layers/source left over from a previous style (safe on first run)
+    ;(['classmate-circles-group', 'classmate-labels-group', 'classmate-circles-individual', 'classmate-labels-individual'] as const)
+      .forEach(l => { if (m.getLayer(l)) m.removeLayer(l) })
+    if (m.getSource('classmates')) m.removeSource('classmates')
 
     m.addSource('classmates', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
@@ -494,7 +525,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       m.on('mouseenter', id, () => { m.getCanvas().style.cursor = 'pointer' })
       m.on('mouseleave', id, () => { m.getCanvas().style.cursor = '' })
     })
-  }, [mapLoaded])
+  }, [mapLoaded, styleVersion])
 
   // ── Update GL source data when city groups change ─────────────────────────
   useEffect(() => {
@@ -544,7 +575,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     )
 
     source.setData({ type: 'FeatureCollection', features: [...groupFeatures, ...individualFeatures] })
-  }, [displayGroups, cityGroups, mapLoaded])
+  }, [displayGroups, cityGroups, mapLoaded, styleVersion])
 
   // ── GL click + hover handlers ─────────────────────────────────────────────
   useEffect(() => {
@@ -640,7 +671,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       m.off('mouseleave', 'classmate-circles-group', handleMouseleave)
       m.off('mouseleave', 'classmate-circles-individual', handleMouseleave)
     }
-  }, [mapLoaded])
+  }, [mapLoaded, styleVersion])
 
   // ── Escape key dismisses pinned card and city panel ───────────────────────
   useEffect(() => {
@@ -924,7 +955,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           </div>
         </div>
         <button
-          onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, duration: 1200, essential: true })}
+          onClick={() => map.current?.flyTo({ center: INITIAL_CENTER, zoom: initialZoomRef.current, duration: 1200, essential: true })}
           className="rounded-xl border border-border bg-card/90 backdrop-blur-sm p-2 text-muted-foreground hover:text-foreground hover:bg-card transition"
           title="Return to default view"
         >
