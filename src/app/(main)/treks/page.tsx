@@ -63,7 +63,7 @@ export default async function TreksPage() {
   }
 
   const suggestedDestinations: SuggestedDestination[] = Array.from(cityMap.values())
-    .filter(d => d.interestedProfiles.length >= 3)
+    .filter(d => d.interestedProfiles.length >= 2)
     .sort((a, b) => b.interestedProfiles.length - a.interestedProfiles.length)
 
   return (

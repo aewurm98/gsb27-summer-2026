@@ -53,6 +53,8 @@ export interface TravelInterest {
   interest_start_date: string | null
   interest_end_date: string | null
   intent: 'working remotely' | 'tourism' | 'visiting family' | 'conference' | 'open' | null
+  open_to_others: boolean
+  is_planned: boolean
   created_at: string
 }
 

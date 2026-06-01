@@ -8,14 +8,14 @@ export default async function HomePage() {
     .from('profiles')
     .select('*', { count: 'exact', head: true })
 
-  const { count: locationCount } = await supabase
-    .from('locations')
-    .select('*', { count: 'exact', head: true })
-
   const { data: cities } = await supabase
     .from('locations')
     .select('city, country')
     .order('city')
+
+  const { count: travelPlanCount } = await supabase
+    .from('travel_interests')
+    .select('*', { count: 'exact', head: true })
 
   const uniqueCities = cities ? [...new Set(cities.map(l => l.city))].length : 0
 
@@ -56,7 +56,7 @@ export default async function HomePage() {
         {[
           { value: profileCount ?? 0, label: 'Classmates' },
           { value: uniqueCities, label: 'Cities' },
-          { value: locationCount ?? 0, label: 'Stops logged' },
+          { value: travelPlanCount ?? 0, label: 'Travel plans' },
         ].map(({ value, label }) => (
           <div key={label} className="rounded-2xl border border-border bg-card p-4 text-center">
             <div className="text-2xl font-bold">{value}</div>

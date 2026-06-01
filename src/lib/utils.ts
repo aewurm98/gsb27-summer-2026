@@ -106,9 +106,15 @@ export function formatDateRange(start: string | null, end: string | null): strin
 
 // ─── Matching engine ─────────────────────────────────────────────────────────
 
+export type MatchBadge =
+  | { type: 'colocation'; weeks: number; city: string }
+  | { type: 'buddies'; cities: string[] }
+  | { type: 'hotel'; city: string; direction: 'i-visit-their-city' | 'they-visit-my-city' | 'mutual' }
+
 export interface MatchResult {
   score: number      // 0–100
-  reasons: string[]  // human-readable chips e.g. "3w overlap in Tokyo"
+  reasons: string[]  // kept for backward compat
+  badges: MatchBadge[]
 }
 
 type MatchProfile = Pick<Profile, 'id' | 'activity_tags' | 'trip_style' | 'group_size_pref' | 'travel_budget' | 'travel_pace'> & {
@@ -134,16 +140,17 @@ function getOverlappingWeeks(
 export function getMatchScore(me: MatchProfile, them: MatchProfile): MatchResult {
   let score = 0
   const reasons: string[] = []
+  const badges: MatchBadge[] = []
 
   // 1. Co-location overlap — up to 40 pts (+5/week, capped)
   const overlaps = getOverlappingWeeks(me.locations, them.locations)
   if (overlaps.length > 0) {
     score += Math.min(40, overlaps.length * 5)
-    // Count by city to surface the most-shared
     const cityCounts = new Map<string, number>()
     overlaps.forEach(o => cityCounts.set(o.city, (cityCounts.get(o.city) ?? 0) + 1))
     const topCity = [...cityCounts.entries()].sort((a, b) => b[1] - a[1])[0]
     reasons.push(`${overlaps.length}w overlap in ${topCity[0]}`)
+    badges.push({ type: 'colocation', weeks: overlaps.length, city: topCity[0] })
   }
 
   // 2. Shared travel interests — up to 30 pts (+10/shared destination)
@@ -153,6 +160,7 @@ export function getMatchScore(me: MatchProfile, them: MatchProfile): MatchResult
     score += Math.min(30, shared.length * 10)
     const names = shared.slice(0, 2).map(t => t.destination_city).join(', ')
     reasons.push(`Both want to visit ${names}${shared.length > 2 ? ` +${shared.length - 2}` : ''}`)
+    badges.push({ type: 'buddies', cities: shared.map(t => t.destination_city).slice(0, 2) })
   }
 
   // 3. Shared activity tags — up to 20 pts (+4/shared tag)
@@ -164,25 +172,44 @@ export function getMatchScore(me: MatchProfile, them: MatchProfile): MatchResult
   }
 
   // 4. Preference matches — up to 15 pts
-  // Trip vibe match (5 pts)
   if (me.trip_style && them.trip_style && me.trip_style === them.trip_style) {
     score += 5
     const label = me.trip_style === 'nightlife' ? 'social & nightlife' : me.trip_style
     reasons.push(`Same vibe (${label})`)
   }
-  // Budget match (5 pts)
   if (me.travel_budget && them.travel_budget && me.travel_budget === them.travel_budget) {
     score += 5
     reasons.push(`Same budget style`)
   }
-  // Pace match (5 pts)
   if (me.travel_pace && them.travel_pace && me.travel_pace === them.travel_pace) {
     score += 5
     const paceLabel = me.travel_pace === 'fast-paced' ? 'fast-paced' : me.travel_pace === 'slow-immersive' ? 'slow & deep' : 'balanced pace'
     reasons.push(`Same pace (${paceLabel})`)
   }
 
-  return { score: Math.min(100, score), reasons }
+  // 5. Hotel badge — one wants to visit somewhere the other lives (no score impact)
+  const myLivingCities = new Set(me.locations.map(l => l.city.toLowerCase()))
+  const theirLivingCities = new Set(them.locations.map(l => l.city.toLowerCase()))
+  const theirInterestCities = new Set(them.travel_interests.map(t => t.destination_city.toLowerCase()))
+
+  const iVisitTheirCity = [...myInterestCities].find(c => theirLivingCities.has(c))
+  const theyVisitMyCity = [...theirInterestCities].find(c => myLivingCities.has(c))
+
+  if (iVisitTheirCity && theyVisitMyCity) {
+    // mutual — find a canonical display city name from the actual records
+    const displayCity = me.locations.find(l => theirInterestCities.has(l.city.toLowerCase()))?.city
+      ?? them.locations.find(l => myInterestCities.has(l.city.toLowerCase()))?.city
+      ?? iVisitTheirCity
+    badges.push({ type: 'hotel', city: displayCity, direction: 'mutual' })
+  } else if (iVisitTheirCity) {
+    const displayCity = them.locations.find(l => l.city.toLowerCase() === iVisitTheirCity)?.city ?? iVisitTheirCity
+    badges.push({ type: 'hotel', city: displayCity, direction: 'i-visit-their-city' })
+  } else if (theyVisitMyCity) {
+    const displayCity = me.locations.find(l => l.city.toLowerCase() === theyVisitMyCity)?.city ?? theyVisitMyCity
+    badges.push({ type: 'hotel', city: displayCity, direction: 'they-visit-my-city' })
+  }
+
+  return { score: Math.min(100, score), reasons, badges }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

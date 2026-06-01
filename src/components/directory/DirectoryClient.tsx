@@ -5,8 +5,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import Fuse from 'fuse.js'
 import { Profile, Location, TravelInterest } from '@/lib/types'
-import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek, getMatchScore } from '@/lib/utils'
-import { Search, MapPin, SlidersHorizontal, X, Sparkles, ArrowUpDown } from 'lucide-react'
+import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek, getMatchScore, type MatchResult } from '@/lib/utils'
+import { Search, MapPin, SlidersHorizontal, X, Sparkles, ArrowUpDown, Plane, Home, ArrowLeft, ArrowRight as ArrowRightIcon, ArrowLeftRight } from 'lucide-react'
+import type { MatchBadge } from '@/lib/utils'
 // (Sparkles still used on the sort toggle button)
 
 // Harvey-ball donut: score 0–100, colored by threshold
@@ -28,6 +29,49 @@ function MatchBall({ score }: { score: number }) {
       </svg>
       <span className="text-xs font-semibold" style={{ color }}>{label}</span>
     </span>
+  )
+}
+
+// Specific match badges replacing generic reason chips
+function MatchBadges({ badges }: { badges: MatchBadge[] }) {
+  if (badges.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1 mt-2.5">
+      {badges.map((badge, i) => {
+        if (badge.type === 'colocation') return (
+          <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+            <MapPin size={9} className="shrink-0" />
+            {badge.weeks}w · {badge.city}
+          </span>
+        )
+        if (badge.type === 'buddies') return (
+          <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20">
+            <Plane size={9} className="shrink-0" />
+            Both: {badge.cities.join(', ')}
+          </span>
+        )
+        if (badge.type === 'hotel') {
+          const DirectionIcon = badge.direction === 'mutual'
+            ? ArrowLeftRight
+            : badge.direction === 'i-visit-their-city'
+              ? ArrowRightIcon
+              : ArrowLeft
+          const tip = badge.direction === 'mutual'
+            ? `You both have plans near ${badge.city}`
+            : badge.direction === 'i-visit-their-city'
+              ? `You want to visit ${badge.city} where they'll be`
+              : `They want to visit ${badge.city} where you'll be`
+          return (
+            <span key={i} title={tip} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 cursor-default">
+              <Home size={9} className="shrink-0" />
+              {badge.city}
+              <DirectionIcon size={9} className="shrink-0 opacity-70" />
+            </span>
+          )
+        }
+        return null
+      })}
+    </div>
   )
 }
 
@@ -71,8 +115,8 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
 
   // Pre-compute match scores for all profiles (excluding self)
   const matchScores = useMemo(() => {
-    if (!myProfile) return new Map<string, { score: number; reasons: string[] }>()
-    const map = new Map<string, { score: number; reasons: string[] }>()
+    if (!myProfile) return new Map<string, MatchResult>()
+    const map = new Map<string, MatchResult>()
     for (const p of profiles) {
       if (p.id === myProfile.id) continue
       map.set(p.id, getMatchScore(myProfile, p))
@@ -303,15 +347,9 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
                 <p className="text-xs text-muted-foreground italic">No locations added yet</p>
               )}
 
-              {/* Match reasons */}
-              {match && match.reasons.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2.5">
-                  {match.reasons.slice(0, 2).map((r, i) => (
-                    <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-primary/8 text-primary border border-primary/20">
-                      {r}
-                    </span>
-                  ))}
-                </div>
+              {/* Match badges */}
+              {match && match.badges.length > 0 && (
+                <MatchBadges badges={match.badges} />
               )}
 
               {/* Interest tags (only when no match reasons) */}

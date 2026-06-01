@@ -37,6 +37,7 @@ export function AdminClient({ profiles, treks }: Props) {
   const [addingNew, setAddingNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const [newHometown, setNewHometown] = useState('')
 
   async function saveEmail(profileId: string) {
     setSaving(true)
@@ -61,6 +62,7 @@ export function AdminClient({ profiles, treks }: Props) {
       .insert({
         full_name: newName.trim(),
         email: newEmail.trim() || null,
+        section: newHometown.trim() || null,
         has_completed_profile: false,
         is_admin: false,
       })
@@ -71,6 +73,7 @@ export function AdminClient({ profiles, treks }: Props) {
     }
     setNewName('')
     setNewEmail('')
+    setNewHometown('')
     setAddingNew(false)
     router.refresh()
   }
@@ -363,9 +366,66 @@ export function AdminClient({ profiles, treks }: Props) {
 
       {tab === 'profiles' && (
         <div className="space-y-4">
-          <div className="text-sm text-muted-foreground">
-            Set an email on any unclaimed profile — when that person signs in with that email, the profile is automatically linked to their account.
+          <div className="flex items-start justify-between gap-4">
+            <div className="text-sm text-muted-foreground max-w-xl">
+              <span className="font-medium text-foreground">Add classmates directly</span> — create a pre-seeded profile with their name and email. When they sign in with that email their profile is automatically claimed and linked. No spreadsheet needed.
+            </div>
+            {!addingNew && (
+              <button
+                onClick={() => setAddingNew(true)}
+                className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition"
+              >
+                <Plus size={14} /> Add classmate
+              </button>
+            )}
           </div>
+
+          {/* Inline add form — shown above the table when active */}
+          {addingNew && (
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+              <p className="text-sm font-medium">New pre-seeded profile</p>
+              <div className="grid sm:grid-cols-3 gap-2">
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder="Full name *"
+                  className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  placeholder="Email (optional)"
+                  className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  value={newHometown}
+                  onChange={e => setNewHometown(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') createProfile()
+                    if (e.key === 'Escape') { setAddingNew(false); setNewName(''); setNewEmail(''); setNewHometown('') }
+                  }}
+                  placeholder="Hometown (optional)"
+                  className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={createProfile}
+                  disabled={saving || !newName.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+                >
+                  <Check size={14} /> {saving ? 'Creating…' : 'Create profile'}
+                </button>
+                <button
+                  onClick={() => { setAddingNew(false); setNewName(''); setNewEmail(''); setNewHometown('') }}
+                  className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-accent transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-border overflow-hidden">
             <table className="w-full text-sm">
@@ -447,62 +507,10 @@ export function AdminClient({ profiles, treks }: Props) {
                   </tr>
                 ))}
 
-                {/* Add new profile row */}
-                {addingNew && (
-                  <tr className="bg-accent/30">
-                    <td className="px-4 py-3">
-                      <input
-                        autoFocus
-                        value={newName}
-                        onChange={e => setNewName(e.target.value)}
-                        placeholder="Full name"
-                        className="w-full px-2 py-1 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        value={newEmail}
-                        onChange={e => setNewEmail(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') createProfile()
-                          if (e.key === 'Escape') setAddingNew(false)
-                        }}
-                        placeholder="email@domain.com (optional)"
-                        className="w-full px-2 py-1 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">Pre-seeded</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={createProfile}
-                          disabled={saving || !newName.trim()}
-                          className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition disabled:opacity-40"
-                        >
-                          <Check size={14} />
-                        </button>
-                        <button
-                          onClick={() => { setAddingNew(false); setNewName(''); setNewEmail('') }}
-                          className="p-1 rounded text-muted-foreground hover:bg-accent transition"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
 
-          {!addingNew && (
-            <button
-              onClick={() => setAddingNew(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition"
-            >
-              <Plus size={14} /> Add pre-seeded profile
-            </button>
-          )}
         </div>
       )}
 

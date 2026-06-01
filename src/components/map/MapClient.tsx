@@ -5,15 +5,27 @@ import Image from 'next/image'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { useTheme } from 'next-themes'
-import { Profile, Location, SUMMER_WEEKS } from '@/lib/types'
+import { Profile, Location, TravelInterest, SUMMER_WEEKS } from '@/lib/types'
 import { getSummerWeeks, getLocationAtWeek, avatarColor, getInitials } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, Users, ArrowRight, RotateCcw, Home, Plane, X, MapPin, Compass } from 'lucide-react'
 import Link from 'next/link'
 import { useMapStore } from '@/lib/map-store'
 
 type MapProfile = Pick<Profile, 'id' | 'full_name' | 'photo_url' | 'can_host' | 'open_to_visit'> & {
   locations: Location[]
+  travel_interests: Pick<TravelInterest, 'destination_city' | 'destination_country' | 'destination_lat' | 'destination_lng' | 'open_to_others' | 'is_planned'>[]
 }
+
+// Aggregate interest destinations for the interests map layer
+interface InterestGroup {
+  city: string
+  country: string
+  lat: number
+  lng: number
+  count: number  // classmates with open_to_others = true and is_planned = false
+}
+
+type MapMode = 'living' | 'interests'
 
 type ExperienceSnippet = {
   label: string | null
@@ -263,7 +275,31 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   const [selectedCity, setSelectedCity] = useState<CityGroup | null>(null)
   const [mergedCluster, setMergedCluster] = useState<CityGroup | null>(null)
   const [showWeekPicker, setShowWeekPicker] = useState(false)
+  const [mapMode, setMapMode] = useState<MapMode>('living')
   const weeks = getSummerWeeks()
+
+  // Aggregate travel interests that are open to others and not yet confirmed/planned
+  const interestGroups = useMemo((): InterestGroup[] => {
+    const cityMap = new Map<string, InterestGroup>()
+    profiles.forEach(profile => {
+      ;(profile.travel_interests ?? []).forEach(t => {
+        if (!t.open_to_others || t.is_planned) return
+        if (t.destination_lat === null || t.destination_lng === null) return
+        const key = t.destination_city.toLowerCase()
+        if (!cityMap.has(key)) {
+          cityMap.set(key, {
+            city: t.destination_city,
+            country: t.destination_country,
+            lat: t.destination_lat,
+            lng: t.destination_lng,
+            count: 0,
+          })
+        }
+        cityMap.get(key)!.count++
+      })
+    })
+    return Array.from(cityMap.values()).sort((a, b) => b.count - a.count)
+  }, [profiles])
 
   const { resolvedTheme } = useTheme()
   const [mapLoaded, setMapLoaded] = useState(false)
@@ -422,26 +458,45 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     }
   }, [mapLoaded])
 
-  // ── Off-screen edge indicators ───────────────────────────────────────────
+  // ── Off-screen edge indicators (mode-aware) ──────────────────────────────
   useEffect(() => {
     if (!map.current || !mapBounds || mapSize.w === 0) { setOffScreen([]); return }
     const PAD = 56
     const cx = mapSize.w / 2, cy = mapSize.h / 2
     const raw: OffScreenIndicator[] = []
 
-    for (const group of displayGroups) {
-      try {
-        if (mapBounds.contains([group.lng, group.lat])) continue
-        const proj = map.current.project([group.lng, group.lat])
-        const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
-        const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
-        raw.push({ ...group, screenX: x, screenY: y, angleDeg })
-      } catch { /* skip during init */ }
+    if (mapMode === 'living') {
+      for (const group of displayGroups) {
+        try {
+          if (mapBounds.contains([group.lng, group.lat])) continue
+          const proj = map.current.project([group.lng, group.lat])
+          const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
+          const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
+          raw.push({ ...group, screenX: x, screenY: y, angleDeg })
+        } catch { /* skip during init */ }
+      }
+      raw.sort((a, b) => b.profiles.length - a.profiles.length)
+    } else {
+      // Interests mode: build synthetic CityGroups from interestGroups for the indicator shape
+      for (const ig of interestGroups) {
+        try {
+          if (mapBounds.contains([ig.lng, ig.lat])) continue
+          const proj = map.current.project([ig.lng, ig.lat])
+          const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
+          const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
+          // Fabricate a minimal CityGroup shape for the indicator
+          raw.push({
+            city: ig.city, lat: ig.lat, lng: ig.lng,
+            profiles: Array.from({ length: ig.count }, () => ({ id: '', full_name: '', photo_url: null, can_host: false, open_to_visit: false, locations: [], travel_interests: [] })),
+            screenX: x, screenY: y, angleDeg,
+          })
+        } catch { /* skip during init */ }
+      }
+      raw.sort((a, b) => b.profiles.length - a.profiles.length)
     }
 
-    raw.sort((a, b) => b.profiles.length - a.profiles.length)
     setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD))
-  }, [displayGroups, mapBounds, mapSize])
+  }, [displayGroups, interestGroups, mapBounds, mapSize, mapMode])
 
   // ── GL source + layers — runs on initial load and after every style switch ─
   useEffect(() => {
@@ -449,9 +504,11 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     const m = map.current
 
     // Clean up any layers/source left over from a previous style (safe on first run)
-    ;(['classmate-circles-group', 'classmate-labels-group', 'classmate-circles-individual', 'classmate-labels-individual'] as const)
+    ;(['classmate-circles-group', 'classmate-labels-group', 'classmate-circles-individual', 'classmate-labels-individual',
+       'interest-circles', 'interest-labels'] as const)
       .forEach(l => { if (m.getLayer(l)) m.removeLayer(l) })
     if (m.getSource('classmates')) m.removeSource('classmates')
+    if (m.getSource('interests')) m.removeSource('interests')
 
     m.addSource('classmates', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
@@ -520,8 +577,44 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       paint: { 'text-color': '#ffffff' },
     })
 
+    // ── Interest circles (all zoom levels, always aggregate) ──────────────
+    m.addSource('interests', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+
+    m.addLayer({
+      id: 'interest-circles',
+      type: 'circle',
+      source: 'interests',
+      layout: { visibility: 'none' },
+      paint: {
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          2, ['*', ['get', 'radius'], 0.5],
+          4, ['*', ['get', 'radius'], 0.8],
+          7, ['get', 'radius'],
+        ],
+        'circle-color': '#f59e0b',
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.9,
+      },
+    })
+    m.addLayer({
+      id: 'interest-labels',
+      type: 'symbol',
+      source: 'interests',
+      layout: {
+        visibility: 'none',
+        'text-field': ['get', 'label'],
+        'text-size': 12,
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: { 'text-color': '#ffffff' },
+    })
+
     // Cursor pointer on hover
-    ;(['classmate-circles-group', 'classmate-circles-individual'] as const).forEach(id => {
+    ;(['classmate-circles-group', 'classmate-circles-individual', 'interest-circles'] as const).forEach(id => {
       m.on('mouseenter', id, () => { m.getCanvas().style.cursor = 'pointer' })
       m.on('mouseleave', id, () => { m.getCanvas().style.cursor = '' })
     })
@@ -576,6 +669,40 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
 
     source.setData({ type: 'FeatureCollection', features: [...groupFeatures, ...individualFeatures] })
   }, [displayGroups, cityGroups, mapLoaded, styleVersion])
+
+  // ── Update interest GL source data when interestGroups changes ───────────
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return
+    const source = map.current.getSource('interests') as mapboxgl.GeoJSONSource
+    if (!source) return
+    const features = interestGroups.map(g => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [g.lng, g.lat] },
+      properties: {
+        city: g.city,
+        count: g.count,
+        label: String(g.count),
+        radius: Math.max(18, 10 + g.count * 4),
+      },
+    }))
+    source.setData({ type: 'FeatureCollection', features })
+  }, [interestGroups, mapLoaded, styleVersion])
+
+  // ── Toggle layer visibility when mapMode changes ──────────────────────────
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return
+    const m = map.current
+    const living = mapMode === 'living' ? 'visible' : 'none'
+    const interests = mapMode === 'interests' ? 'visible' : 'none'
+    ;(['classmate-circles-group', 'classmate-labels-group', 'classmate-circles-individual', 'classmate-labels-individual'] as const)
+      .forEach(id => { if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', living) })
+    ;(['interest-circles', 'interest-labels'] as const)
+      .forEach(id => { if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', interests) })
+    // dismiss panels when switching modes
+    setSelectedCity(null)
+    setMergedCluster(null)
+    setClickCard(null)
+  }, [mapMode, mapLoaded, styleVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── GL click + hover handlers ─────────────────────────────────────────────
   useEffect(() => {
@@ -673,10 +800,26 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     }
   }, [mapLoaded, styleVersion])
 
+  // ── Interest circle click → open interest city panel ─────────────────────
+  const [selectedInterest, setSelectedInterest] = useState<InterestGroup | null>(null)
+
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return
+    const m = map.current
+    const handleInterestClick = (e: mapboxgl.MapLayerMouseEvent) => {
+      const props = e.features?.[0]?.properties
+      if (!props) return
+      const group = interestGroups.find(g => g.city.toLowerCase() === props.city.toLowerCase())
+      if (group) setSelectedInterest(group)
+    }
+    m.on('click', 'interest-circles', handleInterestClick)
+    return () => { m.off('click', 'interest-circles', handleInterestClick) }
+  }, [mapLoaded, styleVersion, interestGroups])
+
   // ── Escape key dismisses pinned card and city panel ───────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setClickCard(null); setSelectedCity(null); setMergedCluster(null) }
+      if (e.key === 'Escape') { setClickCard(null); setSelectedCity(null); setMergedCluster(null); setSelectedInterest(null) }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -692,7 +835,9 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
     return () => clearInterval(interval)
   }, [playing, weekIndex, setWeekIndex])
 
-  const activeCount = cityGroups.reduce((s, g) => s + g.profiles.length, 0)
+  const activeCount = mapMode === 'living'
+    ? cityGroups.reduce((s, g) => s + g.profiles.length, 0)
+    : interestGroups.reduce((s, g) => s + g.count, 0)
 
   return (
     <div className="relative flex-1 flex">
@@ -740,8 +885,28 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         />
       )}
 
+      {/* ── Interest city panel ──────────────────────────────────────────── */}
+      {mapMode === 'interests' && selectedInterest && (
+        <div className="absolute top-4 right-4 w-64 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-10">
+          <div className="p-4 border-b border-border flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm truncate">{selectedInterest.city}</h3>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Users size={10} />
+                {selectedInterest.count} classmate{selectedInterest.count !== 1 ? 's' : ''} interested
+              </p>
+            </div>
+            <button onClick={() => setSelectedInterest(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none shrink-0">×</button>
+          </div>
+          <div className="px-4 py-3 text-xs text-muted-foreground">
+            {selectedInterest.count} classmate{selectedInterest.count !== 1 ? 's have' : ' has'} marked this destination open to others joining.
+            Add it to your <a href="/profile/edit" className="text-primary underline underline-offset-2">travel interests</a> to connect with them.
+          </div>
+        </div>
+      )}
+
       {/* ── Week slider panel ────────────────────────────────────────────── */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
+      <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 transition-opacity duration-200 ${mapMode === 'interests' ? 'opacity-30 pointer-events-none' : ''}`}>
         <div className="relative rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg p-4">
           {showWeekPicker && (
             <div className="absolute bottom-full mb-2 left-0 right-0 bg-card border border-border rounded-xl p-3 shadow-lg z-10">
@@ -774,7 +939,10 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                {weeks[weekIndex].dateLabel} · {activeCount} classmate{activeCount !== 1 ? 's' : ''} tracked
+                {mapMode === 'living'
+                  ? `${weeks[weekIndex].dateLabel} · ${activeCount} classmate${activeCount !== 1 ? 's' : ''} tracked`
+                  : `${interestGroups.length} destination${interestGroups.length !== 1 ? 's' : ''} · ${activeCount} interest${activeCount !== 1 ? 's' : ''} open`
+                }
               </p>
             </div>
             <div className="flex items-center gap-1">
@@ -937,21 +1105,55 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </div>
       )}
 
-      {/* ── Hint + legend + reset button ────────────────────────────────── */}
+      {/* ── Mode toggle + legend + reset ────────────────────────────────── */}
       <div className="absolute top-4 left-4 flex items-start gap-2">
         <div className="flex flex-col gap-1.5">
+          {/* Mode toggle */}
+          <div className="rounded-xl border border-border bg-card/95 backdrop-blur-sm p-1 flex gap-1">
+            <button
+              onClick={() => setMapMode('living')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                mapMode === 'living'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <MapPin size={11} /> Living
+            </button>
+            <button
+              onClick={() => setMapMode('interests')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                mapMode === 'interests'
+                  ? 'bg-amber-500 text-white'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <Compass size={11} /> Interests
+            </button>
+          </div>
+          {/* Mode-specific legend */}
+          {mapMode === 'living' ? (
+            <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
+                Based
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+                Visiting
+              </span>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+                Open to others joining
+              </span>
+              <span className="text-muted-foreground/60">· size = interest count</span>
+            </div>
+          )}
           <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground">
             Click a marker to explore · Drag to pan
-          </div>
-          <div className="rounded-xl border border-border bg-card/90 backdrop-blur-sm px-3 py-2 text-xs text-muted-foreground flex items-center gap-3">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
-              Based
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
-              Visiting
-            </span>
           </div>
         </div>
         <button

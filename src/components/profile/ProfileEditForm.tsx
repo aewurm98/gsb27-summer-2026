@@ -102,6 +102,8 @@ interface InterestDraft {
   interest_start_date: string
   interest_end_date: string
   intent: string
+  open_to_others: boolean
+  is_planned: boolean
 }
 
 type AllProfile = Pick<Profile, 'id' | 'full_name'> & { locations: Location[] }
@@ -165,6 +167,8 @@ export function ProfileEditForm({
       interest_start_date: t.interest_start_date ?? '',
       interest_end_date: t.interest_end_date ?? '',
       intent: t.intent ?? '',
+      open_to_others: t.open_to_others ?? false,
+      is_planned: t.is_planned ?? false,
     })) ?? []
   )
 
@@ -270,6 +274,7 @@ export function ProfileEditForm({
       destination_city: '', destination_country: 'United States',
       destination_lat: null, destination_lng: null,
       notes: '', interest_start_date: '', interest_end_date: '', intent: '',
+      open_to_others: false, is_planned: false,
     }])
   }
 
@@ -365,9 +370,48 @@ export function ProfileEditForm({
             interest_start_date: i.interest_start_date || null,
             interest_end_date: i.interest_end_date || null,
             intent: i.intent || null,
+            open_to_others: i.open_to_others,
+            is_planned: i.is_planned,
           }))
         )
         if (intErr) throw intErr
+      }
+
+      // Auto-convert newly-confirmed trips into location entries.
+      // We re-delete all locations above and re-insert them, so we just
+      // need to add location rows for any planned interest not already in
+      // the locations list (matched by city, case-insensitive).
+      const plannedInterests = validInterests.filter(
+        i => i.is_planned && i.destination_city && i.destination_lat !== null
+      )
+      const existingLocationCities = new Set(
+        locations.filter(l => l.city).map(l => l.city.toLowerCase())
+      )
+      const newFromPlanned = plannedInterests.filter(
+        i => !existingLocationCities.has(i.destination_city.toLowerCase())
+      )
+      if (newFromPlanned.length) {
+        const nextOrder = locations.filter(l => l.city && l.lat !== null).length
+        const { error: plannedLocErr } = await supabase.from('locations').insert(
+          newFromPlanned.map((i, idx) => ({
+            profile_id: profileId,
+            city: i.destination_city,
+            city_ascii: i.destination_city,
+            state: null,
+            country: i.destination_country,
+            lat: i.destination_lat!,
+            lng: i.destination_lng!,
+            start_date: i.interest_start_date || null,
+            end_date: i.interest_end_date || null,
+            sort_order: nextOrder + idx,
+            label: i.intent === 'working remotely' ? 'Summer Internship' : 'Traveling',
+            company: null,
+            role: null,
+            so_name: null,
+            neighborhood: null,
+          }))
+        )
+        if (plannedLocErr) throw plannedLocErr
       }
 
       if (isNewUser) {
@@ -797,7 +841,7 @@ export function ProfileEditForm({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Travel interests</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Places you&#39;d love to visit — we&#39;ll match you with classmates who agree.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Places you&#39;d love to visit — we&#39;ll match you with classmates who agree. Mark &quot;open to others&quot; to appear on the Interests map.</p>
           </div>
           <button
             onClick={addInterest}
@@ -875,6 +919,31 @@ export function ProfileEditForm({
                     className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
+              </div>
+              {/* Visibility + status toggles */}
+              <div className="flex flex-col gap-2 pt-1 border-t border-border/50">
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={interest.open_to_others}
+                    onChange={e => updateInterest(i, { open_to_others: e.target.checked })}
+                    className="w-4 h-4 rounded accent-primary"
+                  />
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                    Open to classmates joining — shows on the Interests map
+                  </span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={interest.is_planned}
+                    onChange={e => updateInterest(i, { is_planned: e.target.checked })}
+                    className="w-4 h-4 rounded accent-primary"
+                  />
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                    Trip confirmed — moves to my itinerary on the Living map
+                  </span>
+                </label>
               </div>
             </div>
           ))}
