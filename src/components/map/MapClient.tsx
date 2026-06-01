@@ -91,17 +91,20 @@ function spreadCoords(
   return [baseLng + r * Math.cos(angle), baseLat + r * Math.sin(angle)]
 }
 
-/** Ray from centre (cx,cy) toward (px,py) — where does it hit the padded rectangle? */
+/** Ray from centre (cx,cy) toward (px,py) — where does it hit the padded rectangle?
+ *  padBottom overrides pad for the bottom edge only (used to clear fixed bottom UI). */
 function getEdgePoint(
   cx: number, cy: number,
   px: number, py: number,
   w: number, h: number,
-  pad: number
+  pad: number,
+  padBottom?: number,
 ): { x: number; y: number } {
+  const pb = padBottom ?? pad
   const dx = px - cx, dy = py - cy
   if (dx === 0 && dy === 0) return { x: cx, y: cy }
   let t = Infinity
-  const l = pad, r = w - pad, top = pad, bot = h - pad
+  const l = pad, r = w - pad, top = pad, bot = h - pb
   if (dx > 0) t = Math.min(t, (r - cx) / dx)
   if (dx < 0) t = Math.min(t, (l - cx) / dx)
   if (dy > 0) t = Math.min(t, (bot - cy) / dy)
@@ -112,15 +115,17 @@ function getEdgePoint(
   }
 }
 
-/** Spread overlapping edge pills so they don't pile up (forward + backward pass) */
+/** Spread overlapping edge pills so they don't pile up (forward + backward pass).
+ *  padBottom overrides PAD for the bottom edge, keeping pills above fixed bottom UI. */
 function resolveIndicatorCollisions(
   indicators: OffScreenIndicator[],
-  w: number, h: number, PAD: number
+  w: number, h: number, PAD: number, padBottom?: number,
 ): OffScreenIndicator[] {
+  const pb = padBottom ?? PAD
   const MIN_GAP = 92
   const classify = (ind: OffScreenIndicator): 'top' | 'bottom' | 'left' | 'right' => {
     const dT = Math.abs(ind.screenY - PAD)
-    const dB = Math.abs(ind.screenY - (h - PAD))
+    const dB = Math.abs(ind.screenY - (h - pb))
     const dL = Math.abs(ind.screenX - PAD)
     const dR = Math.abs(ind.screenX - (w - PAD))
     const min = Math.min(dT, dB, dL, dR)
@@ -153,8 +158,8 @@ function resolveIndicatorCollisions(
   return [
     ...spread(groups.top,    'screenX', PAD, w - PAD),
     ...spread(groups.bottom, 'screenX', PAD, w - PAD),
-    ...spread(groups.left,   'screenY', PAD, h - PAD),
-    ...spread(groups.right,  'screenY', PAD, h - PAD),
+    ...spread(groups.left,   'screenY', PAD, h - pb),
+    ...spread(groups.right,  'screenY', PAD, h - pb),
   ]
 }
 
@@ -462,6 +467,10 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
   useEffect(() => {
     if (!map.current || !mapBounds || mapSize.w === 0) { setOffScreen([]); return }
     const PAD = 56
+    // Interests mode has a ~82px footer at bottom-6; living mode has the week slider
+    // (~144px tall at bottom-6). Both need extra bottom clearance so pills don't
+    // land on top of those fixed panels.
+    const PAD_BOTTOM = mapMode === 'interests' ? 110 : 160
     const cx = mapSize.w / 2, cy = mapSize.h / 2
     const raw: OffScreenIndicator[] = []
 
@@ -470,7 +479,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         try {
           if (mapBounds.contains([group.lng, group.lat])) continue
           const proj = map.current.project([group.lng, group.lat])
-          const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
+          const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD, PAD_BOTTOM)
           const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
           raw.push({ ...group, screenX: x, screenY: y, angleDeg })
         } catch { /* skip during init */ }
@@ -482,7 +491,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         try {
           if (mapBounds.contains([ig.lng, ig.lat])) continue
           const proj = map.current.project([ig.lng, ig.lat])
-          const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD)
+          const { x, y } = getEdgePoint(cx, cy, proj.x, proj.y, mapSize.w, mapSize.h, PAD, PAD_BOTTOM)
           const angleDeg = Math.atan2(proj.y - cy, proj.x - cx) * (180 / Math.PI)
           // Fabricate a minimal CityGroup shape for the indicator
           raw.push({
@@ -495,7 +504,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       raw.sort((a, b) => b.profiles.length - a.profiles.length)
     }
 
-    setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD))
+    setOffScreen(resolveIndicatorCollisions(raw.slice(0, 8), mapSize.w, mapSize.h, PAD, PAD_BOTTOM))
   }, [displayGroups, interestGroups, mapBounds, mapSize, mapMode])
 
   // ── GL source + layers — runs on initial load and after every style switch ─
