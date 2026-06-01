@@ -527,8 +527,16 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           7, ['get', 'radius'],
         ],
         'circle-color': ['case', ['get', 'allVisitors'], '#0ea5e9', '#8C1515'],
-        'circle-stroke-width': 3,
-        'circle-stroke-color': '#ffffff',
+        'circle-stroke-color': [
+          'case',
+          ['>', ['get', 'visitorCount'], 0], '#0ea5e9',
+          '#ffffff'
+        ],
+        'circle-stroke-width': [
+          'case',
+          ['>', ['get', 'visitorCount'], 0], 4,
+          3
+        ],
       },
     })
     m.addLayer({
@@ -631,6 +639,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
       const count = group.profiles.length
       const residentCount = group.profiles.filter(p => !isVisitorExperience(p.currentExperience)).length
       const allVisitors = residentCount === 0
+      const visitorCount = group.profiles.filter(p => isVisitorExperience(p.currentExperience)).length
       const label = count === 1
         ? getInitials(group.profiles[0].full_name)
         : (allVisitors ? `✈${count}` : String(count))
@@ -641,6 +650,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           featureType: 'group',
           city: group.city,
           count,
+          visitorCount,
           allVisitors,
           label,
           radius: Math.max(18, 14 + count * 2),
@@ -905,71 +915,91 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
         </div>
       )}
 
-      {/* ── Week slider panel ────────────────────────────────────────────── */}
-      <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 transition-opacity duration-200 ${mapMode === 'interests' ? 'opacity-30 pointer-events-none' : ''}`}>
-        <div className="relative rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg p-4">
-          {showWeekPicker && (
-            <div className="absolute bottom-full mb-2 left-0 right-0 bg-card border border-border rounded-xl p-3 shadow-lg z-10">
-              <div className="grid grid-cols-4 gap-1">
-                {weeks.map((week, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setWeekIndex(i); setShowWeekPicker(false) }}
-                    className={`px-2 py-1.5 rounded-lg text-xs text-left transition ${
-                      i === weekIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-accent text-muted-foreground'
-                    }`}
-                  >
-                    <div className="font-medium">W{i + 1}</div>
-                    <div className="opacity-70">{week.dateLabel}</div>
-                  </button>
-                ))}
+      {/* ── Week slider panel (living mode only) ─────────────────────────── */}
+      {mapMode === 'living' && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
+          <div className="relative rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg p-4">
+            {showWeekPicker && (
+              <div className="absolute bottom-full mb-2 left-0 right-0 bg-card border border-border rounded-xl p-3 shadow-lg z-10">
+                <div className="grid grid-cols-4 gap-1">
+                  {weeks.map((week, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setWeekIndex(i); setShowWeekPicker(false) }}
+                      className={`px-2 py-1.5 rounded-lg text-xs text-left transition ${
+                        i === weekIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-accent text-muted-foreground'
+                      }`}
+                    >
+                      <div className="font-medium">W{i + 1}</div>
+                      <div className="opacity-70">{week.dateLabel}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold">{weeks[weekIndex].label}</p>
-                <button
-                  onClick={() => setShowWeekPicker(p => !p)}
-                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-                >
-                  Jump to week
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{weeks[weekIndex].label}</p>
+                  <button
+                    onClick={() => setShowWeekPicker(p => !p)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    Jump to week
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {weeks[weekIndex].dateLabel} · {activeCount} classmate{activeCount !== 1 ? 's' : ''} tracked
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setWeekIndex(Math.max(0, weekIndex - 1))} disabled={weekIndex === 0}
+                  className="p-1.5 rounded-lg hover:bg-accent disabled:opacity-30 transition">
+                  <ChevronLeft size={16} />
+                </button>
+                <button onClick={() => setPlaying(p => !p)} className="p-1.5 rounded-lg hover:bg-accent transition">
+                  {playing ? <Pause size={16} /> : <Play size={16} />}
+                </button>
+                <button onClick={() => setWeekIndex(Math.min(SUMMER_WEEKS - 1, weekIndex + 1))} disabled={weekIndex === SUMMER_WEEKS - 1}
+                  className="p-1.5 rounded-lg hover:bg-accent disabled:opacity-30 transition">
+                  <ChevronRight size={16} />
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {mapMode === 'living'
-                  ? `${weeks[weekIndex].dateLabel} · ${activeCount} classmate${activeCount !== 1 ? 's' : ''} tracked`
-                  : `${interestGroups.length} destination${interestGroups.length !== 1 ? 's' : ''} · ${activeCount} interest${activeCount !== 1 ? 's' : ''} open`
-                }
-              </p>
             </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setWeekIndex(Math.max(0, weekIndex - 1))} disabled={weekIndex === 0}
-                className="p-1.5 rounded-lg hover:bg-accent disabled:opacity-30 transition">
-                <ChevronLeft size={16} />
-              </button>
-              <button onClick={() => setPlaying(p => !p)} className="p-1.5 rounded-lg hover:bg-accent transition">
-                {playing ? <Pause size={16} /> : <Play size={16} />}
-              </button>
-              <button onClick={() => setWeekIndex(Math.min(SUMMER_WEEKS - 1, weekIndex + 1))} disabled={weekIndex === SUMMER_WEEKS - 1}
-                className="p-1.5 rounded-lg hover:bg-accent disabled:opacity-30 transition">
-                <ChevronRight size={16} />
-              </button>
+
+            <input type="range" min={0} max={SUMMER_WEEKS - 1} value={weekIndex}
+              onChange={e => setWeekIndex(Number(e.target.value))}
+              className="w-full accent-primary" />
+
+            <div className="flex justify-between mt-1">
+              <span className="text-xs text-muted-foreground">Jun 1</span>
+              <span className="text-xs text-muted-foreground">{weeks[weeks.length - 1].endLabel}</span>
             </div>
-          </div>
-
-          <input type="range" min={0} max={SUMMER_WEEKS - 1} value={weekIndex}
-            onChange={e => setWeekIndex(Number(e.target.value))}
-            className="w-full accent-primary" />
-
-          <div className="flex justify-between mt-1">
-            <span className="text-xs text-muted-foreground">Jun 1</span>
-            <span className="text-xs text-muted-foreground">{weeks[weeks.length - 1].endLabel}</span>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Interests mode: static summary footer ────────────────────────── */}
+      {mapMode === 'interests' && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
+          <div className="rounded-2xl border border-border bg-card/95 backdrop-blur-sm shadow-lg px-5 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">All-summer travel interests</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {interestGroups.length} destination{interestGroups.length !== 1 ? 's' : ''} ·{' '}
+                {interestGroups.reduce((s, g) => s + g.count, 0)} open interest{interestGroups.reduce((s, g) => s + g.count, 0) !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <a
+              href="/profile/edit"
+              className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white font-medium hover:opacity-90 transition"
+            >
+              Add your interests →
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* ── Merged-cluster panel (multiple cities zoom-merged) ────────────── */}
       {mergedCluster && !selectedCity && (
@@ -1112,7 +1142,7 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
           <div className="rounded-xl border border-border bg-card/95 backdrop-blur-sm p-1 flex gap-1">
             <button
               onClick={() => setMapMode('living')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap min-w-[108px] justify-center ${
                 mapMode === 'living'
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -1122,13 +1152,13 @@ export function MapClient({ profiles }: { profiles: MapProfile[] }) {
             </button>
             <button
               onClick={() => setMapMode('interests')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap min-w-[108px] justify-center ${
                 mapMode === 'interests'
                   ? 'bg-amber-500 text-white'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
-              <Compass size={11} /> Interests
+              <Compass size={11} /> Travel Interests
             </button>
           </div>
           {/* Mode-specific legend */}

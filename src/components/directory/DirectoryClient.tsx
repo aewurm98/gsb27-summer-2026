@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Fuse from 'fuse.js'
 import { Profile, Location, TravelInterest } from '@/lib/types'
 import { avatarColor, getInitials, formatDateRange, getSummerWeeks, getLocationAtWeek, getMatchScore, type MatchResult } from '@/lib/utils'
-import { Search, MapPin, SlidersHorizontal, X, Sparkles, ArrowUpDown, Plane, Home, ArrowLeft, ArrowRight as ArrowRightIcon, ArrowLeftRight } from 'lucide-react'
+import { Search, MapPin, SlidersHorizontal, X, Sparkles, ArrowUpDown, Plane, Home, ArrowLeft, ArrowRight as ArrowRightIcon, ArrowLeftRight, ChevronDown } from 'lucide-react'
 import type { MatchBadge } from '@/lib/utils'
 // (Sparkles still used on the sort toggle button)
 
@@ -15,8 +15,14 @@ function MatchBall({ score }: { score: number }) {
   const r = 7, size = 18, cx = 9, cy = 9
   const circ = 2 * Math.PI * r
   const fill = (score / 100) * circ
-  const color = score >= 70 ? '#16a34a' : score >= 45 ? '#ca8a04' : '#ea580c'
-  const label = score >= 70 ? 'Strong match' : score >= 45 ? 'Good match' : 'Some match'
+  const color = score >= 80 ? '#15803d'
+              : score >= 60 ? '#16a34a'
+              : score >= 30 ? '#ca8a04'
+              :               '#ea580c'
+  const label = score >= 80 ? 'Top match'
+              : score >= 60 ? 'High match'
+              : score >= 30 ? 'Medium match'
+              :               'Low match'
   return (
     <span className="flex items-center gap-1 shrink-0">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
@@ -36,42 +42,57 @@ function MatchBall({ score }: { score: number }) {
 function MatchBadges({ badges }: { badges: MatchBadge[] }) {
   if (badges.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-1 mt-2.5">
-      {badges.map((badge, i) => {
-        if (badge.type === 'colocation') return (
-          <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-            <MapPin size={9} className="shrink-0" />
-            {badge.weeks}w · {badge.city}
-          </span>
-        )
-        if (badge.type === 'buddies') return (
-          <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20">
-            <Plane size={9} className="shrink-0" />
-            Both: {badge.cities.join(', ')}
-          </span>
-        )
-        if (badge.type === 'hotel') {
-          const DirectionIcon = badge.direction === 'mutual'
-            ? ArrowLeftRight
-            : badge.direction === 'i-visit-their-city'
-              ? ArrowRightIcon
-              : ArrowLeft
-          const tip = badge.direction === 'mutual'
-            ? `You both have plans near ${badge.city}`
-            : badge.direction === 'i-visit-their-city'
-              ? `You want to visit ${badge.city} where they'll be`
-              : `They want to visit ${badge.city} where you'll be`
-          return (
-            <span key={i} title={tip} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 cursor-default">
-              <Home size={9} className="shrink-0" />
-              {badge.city}
-              <DirectionIcon size={9} className="shrink-0 opacity-70" />
+    <>
+      <div className="flex flex-wrap gap-1 mt-2.5">
+        {badges.map((badge, i) => {
+          if (badge.type === 'colocation') return (
+            <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+              <MapPin size={9} className="shrink-0" />
+              {badge.weeks}w · {badge.city}
             </span>
           )
-        }
-        return null
-      })}
-    </div>
+          if (badge.type === 'buddies') return (
+            <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20">
+              <Plane size={9} className="shrink-0" />
+              Both: {badge.cities.join(', ')}
+            </span>
+          )
+          if (badge.type === 'hotel') {
+            const DirectionIcon = badge.direction === 'mutual'
+              ? ArrowLeftRight
+              : badge.direction === 'i-visit-their-city'
+                ? ArrowRightIcon
+                : ArrowLeft
+            const tip = badge.direction === 'mutual'
+              ? `You both have plans near ${badge.city}`
+              : badge.direction === 'i-visit-their-city'
+                ? `You want to visit ${badge.city} where they'll be`
+                : `They want to visit ${badge.city} where you'll be`
+            return (
+              <span key={i} title={tip} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 cursor-default">
+                <Home size={9} className="shrink-0" />
+                {badge.city}
+                <DirectionIcon size={9} className="shrink-0 opacity-70" />
+              </span>
+            )
+          }
+          return null
+        })}
+      </div>
+      {badges.length > 0 && (
+        <div className="flex gap-3 mt-1">
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+            <MapPin size={8}/> same city
+          </span>
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+            <Plane size={8}/> shared trip
+          </span>
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+            <Home size={8}/> visit overlap
+          </span>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -231,6 +252,7 @@ export function DirectoryClient({ profiles, myProfileId, myProfile }: Props) {
         >
           {sortBy === 'match' ? <Sparkles size={13} /> : <ArrowUpDown size={13} />}
           {sortBy === 'match' ? 'Best match' : 'A–Z'}
+          {sortBy === 'match' && <ChevronDown size={11} className="ml-0.5 opacity-50" />}
         </button>
 
         {hasFilters && (

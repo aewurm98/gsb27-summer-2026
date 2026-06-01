@@ -167,7 +167,7 @@ export function ProfileEditForm({
       interest_start_date: t.interest_start_date ?? '',
       interest_end_date: t.interest_end_date ?? '',
       intent: t.intent ?? '',
-      open_to_others: t.open_to_others ?? false,
+      open_to_others: t.open_to_others ?? true,
       is_planned: t.is_planned ?? false,
     })) ?? []
   )
@@ -274,7 +274,7 @@ export function ProfileEditForm({
       destination_city: '', destination_country: 'United States',
       destination_lat: null, destination_lng: null,
       notes: '', interest_start_date: '', interest_end_date: '', intent: '',
-      open_to_others: false, is_planned: false,
+      open_to_others: true, is_planned: false,
     }])
   }
 
@@ -930,7 +930,7 @@ export function ProfileEditForm({
                     className="w-4 h-4 rounded accent-primary"
                   />
                   <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                    Open to classmates joining — shows on the Interests map
+                    Visible on Interests map (uncheck to keep private)
                   </span>
                 </label>
                 <label className="flex items-center gap-2.5 cursor-pointer group">

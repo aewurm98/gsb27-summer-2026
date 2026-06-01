@@ -8,6 +8,7 @@ import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X,
 import Link from 'next/link'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
+import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useTheme } from 'next-themes'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
@@ -16,6 +17,144 @@ type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile
 interface Props {
   profiles: FullProfile[]
   treks: FullTrek[]
+}
+
+// ── AddClassmateForm ──────────────────────────────────────────────────────────
+function AddClassmateForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel: () => void }) {
+  const supabase = createClient()
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newHometown, setNewHometown] = useState('')
+  const [newCity, setNewCity] = useState('')
+  const [newCityLat, setNewCityLat] = useState<number | null>(null)
+  const [newCityLng, setNewCityLng] = useState<number | null>(null)
+  const [newCityState, setNewCityState] = useState<string | null>(null)
+  const [newCityCountry, setNewCityCountry] = useState('United States')
+  const [newStartDate, setNewStartDate] = useState('')
+  const [newEndDate, setNewEndDate] = useState('')
+  const [newExpLabel, setNewExpLabel] = useState('Summer Internship')
+  const [saving, setSaving] = useState(false)
+
+  async function handleCreate() {
+    if (!newName.trim()) return
+    setSaving(true)
+    const { data: created, error } = await supabase
+      .from('profiles')
+      .insert({
+        full_name: newName.trim(),
+        email: newEmail.trim() || null,
+        section: newHometown.trim() || null,
+        has_completed_profile: false,
+        is_admin: false,
+      })
+      .select()
+      .single()
+    if (error) {
+      alert(`Error creating: ${error.message}`)
+      setSaving(false)
+      return
+    }
+    if (newCity && newCityLat !== null && newCityLng !== null) {
+      await supabase.from('locations').insert({
+        profile_id: created.id,
+        city: newCity,
+        city_ascii: newCity,
+        state: newCityState,
+        country: newCityCountry,
+        lat: newCityLat,
+        lng: newCityLng,
+        start_date: newStartDate || null,
+        end_date: newEndDate || null,
+        sort_order: 0,
+        label: newExpLabel,
+      })
+    }
+    setSaving(false)
+    onSuccess()
+  }
+
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+      <p className="text-sm font-medium">New pre-seeded profile</p>
+      <div className="grid sm:grid-cols-3 gap-2">
+        <input
+          autoFocus
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder="Full name *"
+          className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <input
+          value={newEmail}
+          onChange={e => setNewEmail(e.target.value)}
+          placeholder="Email (optional)"
+          className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <input
+          value={newHometown}
+          onChange={e => setNewHometown(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
+          placeholder="Hometown (optional)"
+          className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">First location (optional)</label>
+          <CityAutocomplete
+            value={newCity}
+            onChange={r => {
+              setNewCity(r?.city ?? '')
+              setNewCityLat(r?.lat ?? null)
+              setNewCityLng(r?.lng ?? null)
+              setNewCityState(r?.state ?? null)
+              setNewCityCountry(r?.country ?? 'United States')
+            }}
+            placeholder="Search city…"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Experience type</label>
+          <select
+            value={newExpLabel}
+            onChange={e => setNewExpLabel(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option>Summer Internship</option>
+            <option>Traveling</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Start date</label>
+          <input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">End date</label>
+          <input type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleCreate}
+          disabled={saving || !newName.trim()}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+        >
+          <Check size={14} /> {saving ? 'Creating…' : 'Create profile'}
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-accent transition"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export function AdminClient({ profiles, treks }: Props) {
@@ -35,9 +174,6 @@ export function AdminClient({ profiles, treks }: Props) {
   const [editEmail, setEditEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [addingNew, setAddingNew] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newHometown, setNewHometown] = useState('')
 
   async function saveEmail(profileId: string) {
     setSaving(true)
@@ -51,30 +187,6 @@ export function AdminClient({ profiles, treks }: Props) {
       return
     }
     setEditingId(null)
-    router.refresh()
-  }
-
-  async function createProfile() {
-    if (!newName.trim()) return
-    setSaving(true)
-    const { error } = await supabase
-      .from('profiles')
-      .insert({
-        full_name: newName.trim(),
-        email: newEmail.trim() || null,
-        section: newHometown.trim() || null,
-        has_completed_profile: false,
-        is_admin: false,
-      })
-    setSaving(false)
-    if (error) {
-      alert(`Error creating: ${error.message}`)
-      return
-    }
-    setNewName('')
-    setNewEmail('')
-    setNewHometown('')
-    setAddingNew(false)
     router.refresh()
   }
 
@@ -382,49 +494,10 @@ export function AdminClient({ profiles, treks }: Props) {
 
           {/* Inline add form — shown above the table when active */}
           {addingNew && (
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-              <p className="text-sm font-medium">New pre-seeded profile</p>
-              <div className="grid sm:grid-cols-3 gap-2">
-                <input
-                  autoFocus
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder="Full name *"
-                  className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <input
-                  value={newEmail}
-                  onChange={e => setNewEmail(e.target.value)}
-                  placeholder="Email (optional)"
-                  className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <input
-                  value={newHometown}
-                  onChange={e => setNewHometown(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') createProfile()
-                    if (e.key === 'Escape') { setAddingNew(false); setNewName(''); setNewEmail(''); setNewHometown('') }
-                  }}
-                  placeholder="Hometown (optional)"
-                  className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={createProfile}
-                  disabled={saving || !newName.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
-                >
-                  <Check size={14} /> {saving ? 'Creating…' : 'Create profile'}
-                </button>
-                <button
-                  onClick={() => { setAddingNew(false); setNewName(''); setNewEmail(''); setNewHometown('') }}
-                  className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-accent transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <AddClassmateForm
+              onSuccess={() => { setAddingNew(false); router.refresh() }}
+              onCancel={() => setAddingNew(false)}
+            />
           )}
 
           <div className="rounded-2xl border border-border overflow-hidden">

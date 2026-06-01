@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trek, TrekInterest, Profile } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search } from 'lucide-react'
+import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search, ArrowRight } from 'lucide-react'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -58,6 +58,8 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
   const [treks, setTreks] = useState(initialTreks)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
+  // Suggested-destination date hints keyed by city name
+  const [suggestDates, setSuggestDates] = useState<Record<string, { start: string; end: string }>>({})
   // Admin member-picker state: trekId → search query
   const [addMemberTrekId, setAddMemberTrekId] = useState<string | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
@@ -87,7 +89,7 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
     })
   }
 
-  function prefillFromSuggestion(dest: SuggestedDestination) {
+  function prefillFromSuggestion(dest: SuggestedDestination, startDate?: string, endDate?: string) {
     setNewTrek(prev => ({
       ...prev,
       title: `${dest.city} Trek`,
@@ -95,6 +97,8 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
       destination_country: dest.country,
       destination_lat: dest.lat,
       destination_lng: dest.lng,
+      proposed_start: startDate ?? '',
+      proposed_end: endDate ?? '',
     }))
     setShowCreateForm(true)
   }
@@ -287,7 +291,7 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                   {/* Admins see "Create trek"; any logged-in classmate sees "I'll lead this" */}
                   {myProfileId && (
                     <button
-                      onClick={() => prefillFromSuggestion(dest)}
+                      onClick={() => prefillFromSuggestion(dest, suggestDates[dest.city]?.start, suggestDates[dest.city]?.end)}
                       className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
                     >
                       <Plus size={11} /> {isAdmin ? 'Create trek' : "I'll lead this"}
@@ -315,6 +319,21 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                     {dest.interestedProfiles.length > 2 ? ` +${dest.interestedProfiles.length - 2}` : ''}
                   </p>
                 </div>
+                {/* Date suggestion row — pre-fills the create-trek form */}
+                <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground">Suggest dates:</span>
+                  <input
+                    type="date"
+                    className="text-xs px-2 py-1 rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    onChange={e => setSuggestDates(prev => ({ ...prev, [dest.city]: { ...prev[dest.city], start: e.target.value } }))}
+                  />
+                  <span className="text-xs text-muted-foreground">→</span>
+                  <input
+                    type="date"
+                    className="text-xs px-2 py-1 rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    onChange={e => setSuggestDates(prev => ({ ...prev, [dest.city]: { ...prev[dest.city], end: e.target.value } }))}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -323,17 +342,39 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
 
       {/* Trek list */}
       {treks.length === 0 ? (
-        <div className="text-center space-y-4 py-12">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <Plane size={24} className="text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">Treks coming soon</h3>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-              Add destinations to your{' '}
-              <Link href="/profile/edit" className="text-primary underline underline-offset-2">travel interests</Link>
-              {' '}— when 3+ classmates share a destination, it appears here as a suggested trek and anyone can step up as group lead.
-            </p>
+        <div className="space-y-6 py-8">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                <Plane size={18} className="text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Signal your travel interests</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add destinations to your profile. When 2+ classmates share a destination it
+                appears here as a suggested trek — and anyone can step up to lead it.
+              </p>
+              <Link href="/profile/edit#interests"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition">
+                Add travel interests <ArrowRight size={13} />
+              </Link>
+            </div>
+            {myProfileId && (
+              <div className="rounded-2xl border border-border bg-card p-6">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                  <Users size={18} className="text-primary" />
+                </div>
+                <h3 className="font-semibold mb-1">Propose a group trek</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Have a destination in mind? Propose it and rally classmates around it —
+                  no admin needed.
+                </p>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-accent transition">
+                  <Plus size={13} /> Propose a trek
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
