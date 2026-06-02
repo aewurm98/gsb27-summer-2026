@@ -4,12 +4,13 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Profile, Location, TravelInterest, Trek, TrekInterest, SUMMER_START, SUMMER_END } from '@/lib/types'
 import { formatDateRange, getSummerWeeks, getLocationAtWeek } from '@/lib/utils'
-import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus, BarChart2, LayoutGrid, ClipboardList } from 'lucide-react'
+import { Download, Users, MapPin, Compass, Search, TrendingUp, Pencil, Check, X, Plus, BarChart2, LayoutGrid, ClipboardList, Trash2, Upload } from 'lucide-react'
 import Link from 'next/link'
 import Papa from 'papaparse'
 import { createClient } from '@/lib/supabase/client'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useTheme } from 'next-themes'
+import type { ImportProfile, ImportResult } from '@/app/api/admin/import-profiles/route'
 
 type FullProfile = Profile & { locations: Location[]; travel_interests: TravelInterest[] }
 type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name'> | undefined })[] }
@@ -19,25 +20,42 @@ interface Props {
   treks: FullTrek[]
 }
 
+interface Stop {
+  city: string
+  lat: number | null
+  lng: number | null
+  state: string | null
+  country: string
+  startDate: string
+  endDate: string
+  label: string
+}
+
+function emptyStop(): Stop {
+  return { city: '', lat: null, lng: null, state: null, country: 'United States', startDate: '', endDate: '', label: 'Summer Internship' }
+}
+
 // ── AddClassmateForm ──────────────────────────────────────────────────────────
 function AddClassmateForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel: () => void }) {
   const supabase = createClient()
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newHometown, setNewHometown] = useState('')
-  const [newCity, setNewCity] = useState('')
-  const [newCityLat, setNewCityLat] = useState<number | null>(null)
-  const [newCityLng, setNewCityLng] = useState<number | null>(null)
-  const [newCityState, setNewCityState] = useState<string | null>(null)
-  const [newCityCountry, setNewCityCountry] = useState('United States')
-  const [newStartDate, setNewStartDate] = useState('')
-  const [newEndDate, setNewEndDate] = useState('')
-  const [newExpLabel, setNewExpLabel] = useState('Summer Internship')
+  const [stops, setStops] = useState<Stop[]>([emptyStop()])
   const [saving, setSaving] = useState(false)
+
+  function updateStop(i: number, patch: Partial<Stop>) {
+    setStops(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s))
+  }
+
+  function removeStop(i: number) {
+    setStops(prev => prev.filter((_, idx) => idx !== i))
+  }
 
   async function handleCreate() {
     if (!newName.trim()) return
     setSaving(true)
+
     const { data: created, error } = await supabase
       .from('profiles')
       .insert({
@@ -49,33 +67,40 @@ function AddClassmateForm({ onSuccess, onCancel }: { onSuccess: () => void; onCa
       })
       .select()
       .single()
+
     if (error) {
       alert(`Error creating: ${error.message}`)
       setSaving(false)
       return
     }
-    if (newCity && newCityLat !== null && newCityLng !== null) {
+
+    for (let i = 0; i < stops.length; i++) {
+      const stop = stops[i]
+      if (!stop.city || stop.lat === null || stop.lng === null) continue
       await supabase.from('locations').insert({
         profile_id: created.id,
-        city: newCity,
-        city_ascii: newCity,
-        state: newCityState,
-        country: newCityCountry,
-        lat: newCityLat,
-        lng: newCityLng,
-        start_date: newStartDate || null,
-        end_date: newEndDate || null,
-        sort_order: 0,
-        label: newExpLabel,
+        city: stop.city,
+        city_ascii: stop.city,
+        state: stop.state,
+        country: stop.country,
+        lat: stop.lat,
+        lng: stop.lng,
+        start_date: stop.startDate || null,
+        end_date: stop.endDate || null,
+        sort_order: i,
+        label: stop.label,
       })
     }
+
     setSaving(false)
     onSuccess()
   }
 
   return (
-    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-4">
       <p className="text-sm font-medium">New pre-seeded profile</p>
+
+      {/* Basic info */}
       <div className="grid sm:grid-cols-3 gap-2">
         <input
           autoFocus
@@ -87,57 +112,91 @@ function AddClassmateForm({ onSuccess, onCancel }: { onSuccess: () => void; onCa
         <input
           value={newEmail}
           onChange={e => setNewEmail(e.target.value)}
-          placeholder="Email (optional)"
+          placeholder="Email (enables auto-claim)"
           className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <input
           value={newHometown}
           onChange={e => setNewHometown(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleCreate() }}
           placeholder="Hometown (optional)"
           className="px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
-      <div className="grid sm:grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">First location (optional)</label>
-          <CityAutocomplete
-            value={newCity}
-            onChange={r => {
-              setNewCity(r?.city ?? '')
-              setNewCityLat(r?.lat ?? null)
-              setNewCityLng(r?.lng ?? null)
-              setNewCityState(r?.state ?? null)
-              setNewCityCountry(r?.country ?? 'United States')
-            }}
-            placeholder="Search city…"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Experience type</label>
-          <select
-            value={newExpLabel}
-            onChange={e => setNewExpLabel(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+
+      {/* Location stops */}
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground font-medium">
+          Summer stops {stops.length > 1 ? `(${stops.length})` : ''}
+        </p>
+        {stops.map((stop, i) => (
+          <div key={i} className="rounded-xl border border-input bg-background p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Stop {i + 1}
+              </span>
+              {stops.length > 1 && (
+                <button
+                  onClick={() => removeStop(i)}
+                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition"
+                  title="Remove stop"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">City</label>
+                <CityAutocomplete
+                  value={stop.city}
+                  onChange={r => updateStop(i, {
+                    city: r?.city ?? '',
+                    lat: r?.lat ?? null,
+                    lng: r?.lng ?? null,
+                    state: r?.state ?? null,
+                    country: r?.country ?? 'United States',
+                  })}
+                  placeholder="Search city…"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Experience type</label>
+                <select
+                  value={stop.label}
+                  onChange={e => updateStop(i, { label: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option>Summer Internship</option>
+                  <option>Traveling</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Start date</label>
+                <input type="date" value={stop.startDate} onChange={e => updateStop(i, { startDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">End date</label>
+                <input type="date" value={stop.endDate} onChange={e => updateStop(i, { endDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {stops.length < 3 && (
+          <button
+            onClick={() => setStops(prev => [...prev, emptyStop()])}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition"
           >
-            <option>Summer Internship</option>
-            <option>Traveling</option>
-            <option>Other</option>
-          </select>
-        </div>
+            <Plus size={12} /> Add another stop
+          </button>
+        )}
       </div>
-      <div className="grid sm:grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Start date</label>
-          <input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">End date</label>
-          <input type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-        </div>
-      </div>
+
       <div className="flex items-center gap-2">
         <button
           onClick={handleCreate}
@@ -157,6 +216,249 @@ function AddClassmateForm({ onSuccess, onCancel }: { onSuccess: () => void; onCa
   )
 }
 
+// ── BatchImportSection ────────────────────────────────────────────────────────
+const CITY_ALIASES: Record<string, string> = {
+  'Palo Alto/ San Francisco': 'Palo Alto',
+  'Palo Alto/San Francisco': 'Palo Alto',
+  'SF': 'San Francisco',
+  'NYC': 'New York',
+  'LA': 'Los Angeles',
+  'DC': 'Washington DC',
+}
+
+function parseTabDate(raw: string): string | null {
+  if (!raw?.trim()) return null
+  const s = raw.trim()
+  // Handle "7.1.26", "9.1.26" style
+  const dotMatch = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/)
+  if (dotMatch) {
+    const [, m, d, y] = dotMatch
+    const year = y.length === 2 ? `20${y}` : y
+    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  // ISO or similar
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  return null
+}
+
+function parsePastedRows(raw: string): ImportProfile[] {
+  const lines = raw.trim().split('\n').filter(l => l.trim())
+  const profiles: ImportProfile[] = []
+
+  for (const line of lines) {
+    const cols = line.split('\t').map(c => c.trim())
+    // Skip header row
+    if (cols[0].toLowerCase() === 'name' || cols[0] === '') continue
+
+    const name = cols[0]
+    if (!name) continue
+
+    const stops = []
+    for (let s = 0; s < 3; s++) {
+      const base = 1 + s * 3
+      const rawCity = cols[base] ?? ''
+      const city = (CITY_ALIASES[rawCity] ?? rawCity).trim()
+      if (!city) continue
+      stops.push({
+        city,
+        start_date: parseTabDate(cols[base + 1] ?? ''),
+        end_date: parseTabDate(cols[base + 2] ?? ''),
+      })
+    }
+
+    profiles.push({ name, stops })
+  }
+
+  return profiles
+}
+
+function BatchImportSection({ onSuccess }: { onSuccess: () => void }) {
+  const [rawText, setRawText] = useState('')
+  const [parsed, setParsed] = useState<ImportProfile[] | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [results, setResults] = useState<ImportResult[] | null>(null)
+  const [parseError, setParseError] = useState('')
+
+  function handleParse() {
+    setParseError('')
+    if (!rawText.trim()) { setParseError('Paste some data first.'); return }
+    const rows = parsePastedRows(rawText)
+    if (rows.length === 0) { setParseError('No valid rows found. Make sure data is tab-separated (copy directly from Excel).'); return }
+    setParsed(rows)
+    setResults(null)
+  }
+
+  async function handleImport() {
+    if (!parsed) return
+    setImporting(true)
+    try {
+      const res = await fetch('/api/admin/import-profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profiles: parsed }),
+      })
+      const data = await res.json()
+      setResults(data.results ?? [])
+      onSuccess()
+    } catch (e) {
+      setParseError(String(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function reset() {
+    setRawText('')
+    setParsed(null)
+    setResults(null)
+    setParseError('')
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium flex items-center gap-2">
+            <Upload size={14} /> Batch import from spreadsheet
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Copy rows directly from the Excel file (columns: Name, City 1, Start 1, End 1, City 2, Start 2, End 2, City 3, Start 3, End 3) and paste below.
+            Claimed profiles are never modified. Existing unclaimed profiles get missing stops merged in.
+          </p>
+        </div>
+      </div>
+
+      {!results && (
+        <>
+          <textarea
+            value={rawText}
+            onChange={e => { setRawText(e.target.value); setParsed(null) }}
+            placeholder={"Alex Wurm\tSeattle\t2026-06-07\t2026-09-08\nJohn Smith\tNew York\t2026-06-15\t2026-08-01\tSan Francisco\t2026-08-05\t2026-09-05"}
+            rows={6}
+            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+          />
+          {parseError && <p className="text-xs text-destructive">{parseError}</p>}
+
+          {!parsed ? (
+            <button
+              onClick={handleParse}
+              disabled={!rawText.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+            >
+              Preview import
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-muted-foreground">{parsed.length} rows parsed — review before importing:</p>
+              <div className="rounded-xl border border-border overflow-hidden max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      {['Name', 'Stop 1', 'Stop 2', 'Stop 3'].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {parsed.map((p, i) => (
+                      <tr key={i} className="hover:bg-accent/30">
+                        <td className="px-3 py-2 font-medium">{p.name}</td>
+                        {[0, 1, 2].map(si => (
+                          <td key={si} className="px-3 py-2 text-muted-foreground">
+                            {p.stops[si] ? (
+                              <span>
+                                {p.stops[si].city}
+                                {p.stops[si].start_date ? <span className="text-muted-foreground/70"> · {p.stops[si].start_date?.slice(5)}</span> : ''}
+                              </span>
+                            ) : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleImport}
+                  disabled={importing}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+                >
+                  <Check size={14} /> {importing ? 'Importing…' : `Import ${parsed.length} profiles`}
+                </button>
+                <button onClick={() => setParsed(null)} className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-accent transition">
+                  Re-paste
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {results && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+              {results.filter(r => r.action === 'created').length} created
+            </span>
+            <span className="text-blue-600 dark:text-blue-400 font-medium">
+              {results.filter(r => r.action === 'merged').length} merged
+            </span>
+            <span className="text-muted-foreground">
+              {results.filter(r => r.action === 'skipped_claimed').length} skipped (claimed)
+            </span>
+            {results.filter(r => r.action === 'error').length > 0 && (
+              <span className="text-destructive font-medium">
+                {results.filter(r => r.action === 'error').length} errors
+              </span>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border overflow-hidden max-h-64 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 sticky top-0">
+                <tr>
+                  {['Name', 'Action', 'Details'].map(h => (
+                    <th key={h} className="text-left px-3 py-2 font-medium text-muted-foreground">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {results.map((r, i) => (
+                  <tr key={i} className="hover:bg-accent/30">
+                    <td className="px-3 py-2 font-medium">{r.name}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        r.action === 'created' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                        r.action === 'merged' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                        r.action === 'skipped_claimed' ? 'bg-muted text-muted-foreground' :
+                        'bg-destructive/10 text-destructive'
+                      }`}>
+                        {r.action === 'skipped_claimed' ? 'claimed' : r.action}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {r.locationsAdded.length > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{r.locationsAdded.join(', ')} </span>}
+                      {r.locationsSkipped.length > 0 && <span className="text-muted-foreground/70">skipped: {r.locationsSkipped.join(', ')}</span>}
+                      {r.error && <span className="text-destructive">{r.error}</span>}
+                      {r.action === 'skipped_claimed' && <span>profile owned by user</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button onClick={reset} className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-accent transition">
+            Import more
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── AdminClient ───────────────────────────────────────────────────────────────
 export function AdminClient({ profiles, treks }: Props) {
   const [tab, setTab] = useState<'classmates' | 'treks' | 'insights' | 'profiles'>('classmates')
   const [insightsTab, setInsightsTab] = useState<'destinations' | 'heatmap' | 'completeness'>('destinations')
@@ -174,6 +476,7 @@ export function AdminClient({ profiles, treks }: Props) {
   const [editEmail, setEditEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [addingNew, setAddingNew] = useState(false)
+  const [showBatchImport, setShowBatchImport] = useState(false)
 
   async function saveEmail(profileId: string) {
     setSaving(true)
@@ -265,8 +568,6 @@ export function AdminClient({ profiles, treks }: Props) {
 
   const sortedProfiles = [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name))
 
-  // For each top destination, compute week-by-week interest counts using interest date ranges.
-  // Interests with no dates are counted in every week (flexible timing).
   const destinationTimeline = useMemo(() => {
     const weeks = getSummerWeeks()
     return trekInsights.slice(0, 12).map(insight => {
@@ -287,11 +588,8 @@ export function AdminClient({ profiles, treks }: Props) {
     })
   }, [trekInsights, profiles])
 
-  // ─── Phase 4 Analytics ────────────────────────────────────────────────────
-
   const weeks = getSummerWeeks()
 
-  // Top cities by total presence (for heatmap columns), optionally sorted alpha
   const topCities = useMemo(() => {
     const cityCount = new Map<string, number>()
     profiles.forEach(p =>
@@ -304,7 +602,6 @@ export function AdminClient({ profiles, treks }: Props) {
     return heatmapCitySort === 'alpha' ? [...byCount].sort() : byCount
   }, [profiles, heatmapCitySort])
 
-  // Weekly density matrix: weeks × cities
   const weekCityMatrix = useMemo(() =>
     weeks.map(w => ({
       label: w.label,
@@ -323,7 +620,6 @@ export function AdminClient({ profiles, treks }: Props) {
     Math.max(1, ...weekCityMatrix.flatMap(w => w.cities.map(c => c.count)))
   , [weekCityMatrix])
 
-  // Data completeness scores
   const completenessScores = useMemo(() =>
     sortedProfiles.map(p => {
       let score = 0
@@ -341,7 +637,7 @@ export function AdminClient({ profiles, treks }: Props) {
   const sortedCompleteness = useMemo(() => {
     if (completenessSort === 'desc') return [...completenessScores].reverse()
     if (completenessSort === 'alpha') return [...completenessScores].sort((a, b) => a.profile.full_name.localeCompare(b.profile.full_name))
-    return completenessScores // 'asc' is the default sort
+    return completenessScores
   }, [completenessScores, completenessSort])
 
   const completenessStats = useMemo(() => {
@@ -480,19 +776,43 @@ export function AdminClient({ profiles, treks }: Props) {
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="text-sm text-muted-foreground max-w-xl">
-              <span className="font-medium text-foreground">Add classmates directly</span> — create a pre-seeded profile with their name and email. When they sign in with that email their profile is automatically claimed and linked. No spreadsheet needed.
+              <span className="font-medium text-foreground">Pre-seed classmate profiles</span> — add a name + email and optionally their summer stops.
+              When they sign in with that email their profile is automatically claimed.
             </div>
-            {!addingNew && (
-              <button
-                onClick={() => setAddingNew(true)}
-                className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition"
-              >
-                <Plus size={14} /> Add classmate
-              </button>
-            )}
+            <div className="shrink-0 flex items-center gap-2">
+              {!showBatchImport && (
+                <button
+                  onClick={() => setShowBatchImport(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-accent transition"
+                >
+                  <Upload size={14} /> Batch import
+                </button>
+              )}
+              {!addingNew && (
+                <button
+                  onClick={() => setAddingNew(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition"
+                >
+                  <Plus size={14} /> Add classmate
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Inline add form — shown above the table when active */}
+          {showBatchImport && (
+            <BatchImportSection
+              onSuccess={() => { router.refresh() }}
+            />
+          )}
+          {showBatchImport && (
+            <button
+              onClick={() => setShowBatchImport(false)}
+              className="text-xs text-muted-foreground hover:text-foreground transition"
+            >
+              ← Hide batch import
+            </button>
+          )}
+
           {addingNew && (
             <AddClassmateForm
               onSuccess={() => { setAddingNew(false); router.refresh() }}
@@ -504,7 +824,7 @@ export function AdminClient({ profiles, treks }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  {['Name', 'Email', 'Status', 'Locations'].map(h => (
+                  {['Name', 'Email', 'Status', 'Stops'].map(h => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -574,16 +894,23 @@ export function AdminClient({ profiles, treks }: Props) {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {p.locations?.length ?? 0}
+                    <td className="px-4 py-3">
+                      {p.locations?.length
+                        ? <div className="space-y-0.5">
+                            {p.locations.sort((a, b) => a.sort_order - b.sort_order).map(l => (
+                              <div key={l.id} className="text-xs text-muted-foreground">
+                                {l.city}{l.start_date ? ` · ${l.start_date.slice(5)}` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        : <span className="text-muted-foreground text-xs">—</span>
+                      }
                     </td>
                   </tr>
                 ))}
-
               </tbody>
             </table>
           </div>
-
         </div>
       )}
 
@@ -627,7 +954,6 @@ export function AdminClient({ profiles, treks }: Props) {
 
       {tab === 'insights' && (
         <div className="space-y-4">
-          {/* Insights sub-tabs */}
           <div className="flex gap-1 rounded-xl border border-border bg-card p-1 w-fit">
             <button onClick={() => setInsightsTab('destinations')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${insightsTab === 'destinations' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
@@ -643,7 +969,6 @@ export function AdminClient({ profiles, treks }: Props) {
             </button>
           </div>
 
-          {/* Destinations */}
           {insightsTab === 'destinations' && (
             <>
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -702,13 +1027,11 @@ export function AdminClient({ profiles, treks }: Props) {
                   </table>
                 </div>
               ) : (
-                /* Timeline view: each destination row shows week-by-week interest concentration */
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
                     Each bar = # classmates interested in visiting that week (based on stated date preferences; no-date interests count all summer).
                   </p>
                   <div className="rounded-2xl border border-border overflow-hidden">
-                    {/* Week header */}
                     <div className="flex bg-muted/50 border-b border-border">
                       <div className="w-40 shrink-0 px-4 py-2 text-xs font-medium text-muted-foreground">Destination</div>
                       <div className="flex-1 overflow-x-auto">
@@ -752,7 +1075,6 @@ export function AdminClient({ profiles, treks }: Props) {
             </>
           )}
 
-          {/* Weekly heatmap */}
           {insightsTab === 'heatmap' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -821,10 +1143,8 @@ export function AdminClient({ profiles, treks }: Props) {
             </div>
           )}
 
-          {/* Data completeness */}
           {insightsTab === 'completeness' && (
             <div className="space-y-4">
-              {/* Summary stats */}
               <div className="grid grid-cols-4 gap-3">
                 {[
                   { label: 'Avg completeness', value: `${completenessStats.avgScore}%` },
@@ -839,7 +1159,6 @@ export function AdminClient({ profiles, treks }: Props) {
                 ))}
               </div>
 
-              {/* Sort controls */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Sort by:</span>
                 {([['asc', 'Score ↑'], ['desc', 'Score ↓'], ['alpha', 'Name A–Z']] as const).map(([val, lbl]) => (
