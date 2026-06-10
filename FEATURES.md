@@ -10,7 +10,7 @@
 ### Database Tables
 | Table | Key columns |
 |---|---|
-| `profiles` | id, user_id, email, full_name, photo_url, section (Hometown), additional_details, can_host, hosting_details, open_to_visit, has_completed_profile, is_admin, activity_tags, trip_style, group_size_pref, travel_budget, travel_pace |
+| `profiles` | id, user_id, email, full_name, photo_url, section (Hometown), additional_details, can_host, hosting_details, open_to_visit, has_completed_profile, is_admin, is_co_admin, activity_tags, trip_style, group_size_pref, travel_budget, travel_pace |
 | `locations` | id, profile_id, city, city_ascii, state, country, lat, lng, start_date, end_date, sort_order, label, company, role, so_name, neighborhood |
 | `travel_interests` | id, profile_id, destination_city, destination_country, destination_lat, destination_lng, notes, interest_start_date, interest_end_date, intent |
 | `treks` | id, title, destination_city, destination_country, destination_lat, destination_lng, proposed_start, proposed_end, description, activity_tags, cost_tier, max_group_size, created_by |
@@ -37,6 +37,7 @@
 - `005_storage_rls.sql` — avatar storage RLS policies
 - `007_travel_preferences_v2.sql` — travel_budget, travel_pace columns
 - `008_location_neighborhood.sql` — neighborhood column on locations
+- `add_is_co_admin_to_profiles` — is_co_admin boolean on profiles (2026-06-09)
 
 ---
 
@@ -123,6 +124,40 @@ the map and in match scoring.
 
 ---
 
+---
+
+## Phase 6 — Co-Admin Roles + Trek Invite Emails ✅
+
+### Co-admin accounts (2026-06-09)
+
+New `is_co_admin boolean DEFAULT false` column on `profiles`. Promote a classmate:
+```sql
+UPDATE profiles SET is_co_admin = true WHERE email = 'classmate@stanford.edu';
+```
+
+**Capability matrix:**
+
+| Feature | Super-admin (`is_admin`) | Co-admin (`is_co_admin`) | Regular user |
+|---|---|---|---|
+| Admin nav link | ✅ | ✅ | — |
+| Classmates / Treks / Insights tabs | ✅ | ✅ | — |
+| Export CSV | ✅ | ✅ | — |
+| Profiles tab (add / edit / batch-import) | ✅ | — | — |
+| "New trek" button | ✅ | ✅ | — |
+| Member-picker (add anyone to any trek) | ✅ | own treks only | — |
+| Invite via email | ✅ | any trek | creator only |
+
+### Trek invite emails (2026-06-09)
+
+Mail icon (✉) on each trek card, visible to the trek creator, co-admins, and super-admins.
+
+**Flow:** select classmates (matching travel interests pre-checked) → preview
+templatized email with FOMO mystery line ("N other GSB classmates are already curious
+about this trip") → "Open in mail app" fires a `mailto:` with pre-filled
+To/Subject/Body linking to `/treks`. Fully free — no backend email service.
+
+---
+
 ## Implementation Order
 
 | Phase | Status | Notes |
@@ -139,3 +174,5 @@ the map and in match scoring.
 | 4c/d — Completeness | ✅ Done | AdminClient.tsx completeness sub-tab with progress bars |
 | 5 — Nomad support | ✅ Done | middleware.ts, getLocationAtWeek specificity fix, map visitor markers |
 | 5b — Self-serve treks | ✅ Done | Any classmate can lead a suggested trek; group lead shown on cards |
+| 6a — Co-admin roles | ✅ Done | is_co_admin flag; full admin read access + trek management, no profile editing |
+| 6b — Trek invite emails | ✅ Done | Mailto-based invite panel with pre-selection, FOMO mystery count, email preview |

@@ -20,7 +20,7 @@ export default async function TreksPage() {
 
   const { data: myProfile } = await supabase
     .from('profiles')
-    .select('id, is_admin')
+    .select('id, is_admin, is_co_admin')
     .eq('user_id', user!.id)
     .single()
 
@@ -90,6 +90,7 @@ export default async function TreksPage() {
         treks={treks ?? []}
         myProfileId={myProfile?.id ?? null}
         isAdmin={myProfile?.is_admin ?? false}
+        isCoAdmin={myProfile?.is_co_admin ?? false}
         suggestedDestinations={suggestedDestinations}
         allProfiles={allProfiles ?? []}
         interestsByCity={interestsByCity}

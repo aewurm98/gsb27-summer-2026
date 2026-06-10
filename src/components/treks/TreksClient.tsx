@@ -50,12 +50,14 @@ interface Props {
   treks: FullTrek[]
   myProfileId: string | null
   isAdmin: boolean
+  isCoAdmin: boolean
   suggestedDestinations: SuggestedDestination[]
   allProfiles: Array<{ id: string; full_name: string; photo_url: string | null; email: string | null }>
   interestsByCity: Record<string, string[]>
 }
 
-export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggestedDestinations, allProfiles, interestsByCity }: Props) {
+export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, isCoAdmin, suggestedDestinations, allProfiles, interestsByCity }: Props) {
+  const canManage = isAdmin || isCoAdmin
   const [treks, setTreks] = useState(initialTreks)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -204,7 +206,7 @@ ${myName}`)
 
   return (
     <div className="space-y-6">
-      {isAdmin && (
+      {canManage && (
         <div className="flex justify-end">
           <button
             onClick={() => setShowCreateForm(v => !v)}
@@ -334,7 +336,7 @@ ${myName}`)
                       onClick={() => prefillFromSuggestion(dest, suggestDates[dest.city]?.start, suggestDates[dest.city]?.end)}
                       className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
                     >
-                      <Plus size={11} /> {isAdmin ? 'Create trek' : "I'll lead this"}
+                      <Plus size={11} /> {canManage ? 'Create trek' : "I'll lead this"}
                     </button>
                   )}
                 </div>
@@ -487,8 +489,8 @@ ${myName}`)
                         <Check size={12} /> {myInterest?.status === 'confirmed' ? 'Confirmed' : 'Interested'}
                       </button>
                     )}
-                    {/* Invite button — visible to trek creator and admins */}
-                    {(isAdmin || trek.created_by === myProfileId) && myProfileId && (
+                    {/* Invite button — visible to any planner (admin/co-admin) or the trek creator */}
+                    {(canManage || trek.created_by === myProfileId) && myProfileId && (
                       <button
                         onClick={() => inviteTrekId === trek.id ? setInviteTrekId(null) : openInvitePanel(trek)}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-border hover:bg-accent transition"
@@ -497,7 +499,8 @@ ${myName}`)
                         <Mail size={12} />
                       </button>
                     )}
-                    {isAdmin && (
+                    {/* Member-picker: super-admin can add to any trek; co-admin only to their own */}
+                    {(isAdmin || (isCoAdmin && trek.created_by === myProfileId)) && (
                       <button
                         onClick={() => { setAddMemberTrekId(trek.id); setMemberSearch('') }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-border hover:bg-accent transition"
@@ -664,8 +667,8 @@ ${myName}`)
                   )
                 })()}
 
-                {/* Admin: inline member picker */}
-                {isAdmin && addMemberTrekId === trek.id && (
+                {/* Inline member picker — super-admin any trek, co-admin own treks */}
+                {(isAdmin || (isCoAdmin && trek.created_by === myProfileId)) && addMemberTrekId === trek.id && (
                   <div className="mt-4 pt-4 border-t border-border space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-medium text-muted-foreground">Add classmate to trek</p>
