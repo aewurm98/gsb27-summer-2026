@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trek, TrekInterest, Profile } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search, ArrowRight } from 'lucide-react'
+import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search, ArrowRight, Mail } from 'lucide-react'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -51,10 +51,11 @@ interface Props {
   myProfileId: string | null
   isAdmin: boolean
   suggestedDestinations: SuggestedDestination[]
-  allProfiles: Array<{ id: string; full_name: string; photo_url: string | null }>
+  allProfiles: Array<{ id: string; full_name: string; photo_url: string | null; email: string | null }>
+  interestsByCity: Record<string, string[]>
 }
 
-export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggestedDestinations, allProfiles }: Props) {
+export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggestedDestinations, allProfiles, interestsByCity }: Props) {
   const [treks, setTreks] = useState(initialTreks)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -64,8 +65,47 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
   const [addMemberTrekId, setAddMemberTrekId] = useState<string | null>(null)
   const [memberSearch, setMemberSearch] = useState('')
   const [addingMember, setAddingMember] = useState(false)
+  // Invite panel state
+  const [inviteTrekId, setInviteTrekId] = useState<string | null>(null)
+  const [inviteSelected, setInviteSelected] = useState<Set<string>>(new Set())
+  const [inviteSearch, setInviteSearch] = useState('')
   const supabase = createClient()
   const router = useRouter()
+
+  function openInvitePanel(trek: FullTrek) {
+    const preSelected = new Set(
+      (interestsByCity[trek.destination_city.toLowerCase()] ?? []).filter(
+        id => id !== myProfileId
+      )
+    )
+    setInviteSelected(preSelected)
+    setInviteSearch('')
+    setInviteTrekId(trek.id)
+  }
+
+  function buildMailtoLink(trek: FullTrek, selectedIds: Set<string>, myName: string) {
+    const invitees = allProfiles.filter(p => selectedIds.has(p.id))
+    const emails = invitees.map(p => p.email).filter(Boolean).join(',')
+    const othersCount = invitees.length - 1
+    const mysteryLine = othersCount > 0
+      ? `${othersCount} other GSB classmate${othersCount === 1 ? '' : 's'} ${othersCount === 1 ? 'is' : 'are'} already curious about this trip.`
+      : 'Be the first from our class to join!'
+    const trekUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/treks`
+    const subject = encodeURIComponent(`Trek to ${trek.destination_city} this summer?`)
+    const body = encodeURIComponent(
+`Hi there,
+
+${myName} here — I'm organizing a group trek to ${trek.destination_city} this summer and would love for you to join!
+
+${mysteryLine} Don't miss out →
+${trekUrl}
+
+Once you click through, you can mark yourself as interested (or not) and see exactly who else is in.
+
+Looking forward to it,
+${myName}`)
+    return `mailto:${emails}?subject=${subject}&body=${body}`
+  }
 
   const [newTrek, setNewTrek] = useState({
     title: '',
@@ -447,6 +487,16 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                         <Check size={12} /> {myInterest?.status === 'confirmed' ? 'Confirmed' : 'Interested'}
                       </button>
                     )}
+                    {/* Invite button — visible to trek creator and admins */}
+                    {(isAdmin || trek.created_by === myProfileId) && myProfileId && (
+                      <button
+                        onClick={() => inviteTrekId === trek.id ? setInviteTrekId(null) : openInvitePanel(trek)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-border hover:bg-accent transition"
+                        title="Invite classmates to this trek"
+                      >
+                        <Mail size={12} />
+                      </button>
+                    )}
                     {isAdmin && (
                       <button
                         onClick={() => { setAddMemberTrekId(trek.id); setMemberSearch('') }}
@@ -483,6 +533,136 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, suggest
                     </p>
                   </div>
                 )}
+
+                {/* Invite classmates panel */}
+                {inviteTrekId === trek.id && (() => {
+                  const myProfile = allProfiles.find(p => p.id === myProfileId)
+                  const myName = myProfile?.full_name ?? 'A classmate'
+                  const filtered = allProfiles.filter(p =>
+                    p.id !== myProfileId &&
+                    (inviteSearch === '' || p.full_name.toLowerCase().includes(inviteSearch.toLowerCase()))
+                  )
+                  const withInterest = filtered.filter(p => interestsByCity[trek.destination_city.toLowerCase()]?.includes(p.id))
+                  const withoutInterest = filtered.filter(p => !interestsByCity[trek.destination_city.toLowerCase()]?.includes(p.id))
+                  const orderedProfiles = [...withInterest, ...withoutInterest]
+                  const othersCount = inviteSelected.size - 1
+
+                  return (
+                    <div className="mt-4 pt-4 border-t border-border space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold">Invite classmates</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Pre-selected: classmates with matching travel interests
+                          </p>
+                        </div>
+                        <button onClick={() => setInviteTrekId(null)} className="text-muted-foreground hover:text-foreground">
+                          <X size={13} />
+                        </button>
+                      </div>
+
+                      {/* Search */}
+                      <div className="relative">
+                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                        <input
+                          value={inviteSearch}
+                          onChange={e => setInviteSearch(e.target.value)}
+                          placeholder="Filter classmates…"
+                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                      </div>
+
+                      {/* Classmate list */}
+                      <div className="rounded-lg border border-border bg-card overflow-hidden max-h-52 overflow-y-auto divide-y divide-border">
+                        {orderedProfiles.length === 0 ? (
+                          <p className="px-3 py-2 text-xs text-muted-foreground">No classmates found</p>
+                        ) : orderedProfiles.map(p => {
+                          const hasInterest = interestsByCity[trek.destination_city.toLowerCase()]?.includes(p.id)
+                          const selected = inviteSelected.has(p.id)
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => setInviteSelected(prev => {
+                                const next = new Set(prev)
+                                next.has(p.id) ? next.delete(p.id) : next.add(p.id)
+                                return next
+                              })}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-accent text-xs transition"
+                            >
+                              <div className={`w-5 h-5 rounded flex items-center justify-center border transition shrink-0 ${
+                                selected ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-background'
+                              }`}>
+                                {selected && <Check size={10} />}
+                              </div>
+                              <div className={`relative w-6 h-6 rounded-full overflow-hidden flex items-center justify-center text-white text-[10px] font-bold shrink-0 ${avatarColor(p.full_name)}`}>
+                                {p.photo_url
+                                  ? <Image src={p.photo_url} alt={p.full_name} fill className="object-cover" unoptimized />
+                                  : getInitials(p.full_name)
+                                }
+                              </div>
+                              <span className="flex-1 truncate font-medium">{p.full_name}</span>
+                              {hasInterest && (
+                                <span className="text-[10px] text-primary font-medium shrink-0">interested</span>
+                              )}
+                              {!p.email && (
+                                <span className="text-[10px] text-muted-foreground shrink-0">no email</span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Email preview */}
+                      {inviteSelected.size > 0 && (() => {
+                        const invitees = allProfiles.filter(p => inviteSelected.has(p.id))
+                        const withEmail = invitees.filter(p => p.email)
+                        const noEmail = invitees.filter(p => !p.email)
+                        return (
+                          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-xs font-semibold text-primary">Email preview</p>
+                              <span className="text-[10px] text-muted-foreground">
+                                {withEmail.length} of {invitees.length} have emails on file
+                              </span>
+                            </div>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              <p><span className="font-medium text-foreground">To:</span> {
+                                withEmail.slice(0, 3).map(p => p.full_name.split(' ')[0]).join(', ')
+                              }{withEmail.length > 3 ? ` +${withEmail.length - 3} more` : ''}</p>
+                              <p><span className="font-medium text-foreground">Subject:</span> Trek to {trek.destination_city} this summer?</p>
+                              <div className="mt-1.5 p-2 rounded-lg bg-background border border-border text-[11px] leading-relaxed">
+                                <p>Hi there,</p>
+                                <p className="mt-1">{myName} here — I'm organizing a group trek to <strong>{trek.destination_city}</strong> this summer and would love for you to join!</p>
+                                <p className="mt-1 font-medium text-primary">
+                                  {othersCount > 0
+                                    ? `${othersCount} other GSB classmate${othersCount === 1 ? '' : 's'} ${othersCount === 1 ? 'is' : 'are'} already curious about this trip.`
+                                    : 'Be the first from our class to join!'}
+                                  {' '}Don't miss out →
+                                </p>
+                                <p className="mt-1 text-muted-foreground italic">[link to trek page]</p>
+                              </div>
+                            </div>
+                            {noEmail.length > 0 && (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                {noEmail.length} selected {noEmail.length === 1 ? 'classmate has' : 'classmates have'} no email on file and will be skipped.
+                              </p>
+                            )}
+                            <a
+                              href={buildMailtoLink(trek, inviteSelected, myName)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
+                            >
+                              <Mail size={11} /> Open in mail app ({withEmail.length} recipient{withEmail.length !== 1 ? 's' : ''})
+                            </a>
+                          </div>
+                        )
+                      })()}
+
+                      {inviteSelected.size === 0 && (
+                        <p className="text-[11px] text-muted-foreground">Select at least one classmate to draft the invite.</p>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Admin: inline member picker */}
                 {isAdmin && addMemberTrekId === trek.id && (

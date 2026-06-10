@@ -9,11 +9,11 @@ export default async function AdminPage() {
 
   const { data: myProfile } = await supabase
     .from('profiles')
-    .select('is_admin')
+    .select('is_admin, is_co_admin')
     .eq('user_id', user.id)
     .single()
 
-  if (!myProfile?.is_admin) redirect('/')
+  if (!myProfile?.is_admin && !myProfile?.is_co_admin) redirect('/')
 
   const { data: profiles } = await supabase
     .from('profiles')
@@ -35,7 +35,7 @@ export default async function AdminPage() {
           </p>
         </div>
       </div>
-      <AdminClient profiles={profiles ?? []} treks={treks ?? []} />
+      <AdminClient profiles={profiles ?? []} treks={treks ?? []} isSuperAdmin={myProfile?.is_admin ?? false} />
     </div>
   )
 }

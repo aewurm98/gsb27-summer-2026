@@ -11,6 +11,7 @@ export interface Profile {
   open_to_visit: boolean
   has_completed_profile: boolean
   is_admin: boolean
+  is_co_admin: boolean
   activity_tags: string[]
   trip_style: 'adventure' | 'cultural' | 'relaxation' | 'foodie' | 'nightlife' | 'mixed' | null
   group_size_pref: 'solo' | 'small (2-4)' | 'medium (5-10)' | 'large (10+)' | 'any' | null

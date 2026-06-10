@@ -24,10 +24,10 @@ export default async function TreksPage() {
     .eq('user_id', user!.id)
     .single()
 
-  // For admin member-picker: fetch all classmates (lightweight)
+  // For member-picker + invite emails: fetch all classmates with email
   const { data: allProfiles } = await supabase
     .from('profiles')
-    .select('id, full_name, photo_url')
+    .select('id, full_name, photo_url, email')
     .order('full_name')
 
   // Compute suggested treks from travel interests (3+ classmates share a destination)
@@ -66,6 +66,18 @@ export default async function TreksPage() {
     .filter(d => d.interestedProfiles.length >= 2)
     .sort((a, b) => b.interestedProfiles.length - a.interestedProfiles.length)
 
+  // Build city → profileId[] map for invite pre-selection (all interests, not just suggestable)
+  const interestsByCity: Record<string, string[]> = {}
+  for (const interest of allInterests ?? []) {
+    const key = interest.destination_city.toLowerCase()
+    if (!interestsByCity[key]) interestsByCity[key] = []
+    const profileRaw = interest.profile
+    const profile = (Array.isArray(profileRaw) ? profileRaw[0] : profileRaw) as { id: string } | null
+    if (profile && !interestsByCity[key].includes(profile.id)) {
+      interestsByCity[key].push(profile.id)
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
       <div className="mb-8">
@@ -80,6 +92,7 @@ export default async function TreksPage() {
         isAdmin={myProfile?.is_admin ?? false}
         suggestedDestinations={suggestedDestinations}
         allProfiles={allProfiles ?? []}
+        interestsByCity={interestsByCity}
       />
     </div>
   )

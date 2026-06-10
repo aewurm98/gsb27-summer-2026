@@ -18,6 +18,7 @@ type FullTrek = Trek & { trek_interests: (TrekInterest & { profile: Pick<Profile
 interface Props {
   profiles: FullProfile[]
   treks: FullTrek[]
+  isSuperAdmin: boolean
 }
 
 interface Stop {
@@ -459,7 +460,7 @@ function BatchImportSection({ onSuccess }: { onSuccess: () => void }) {
 }
 
 // ── AdminClient ───────────────────────────────────────────────────────────────
-export function AdminClient({ profiles, treks }: Props) {
+export function AdminClient({ profiles, treks, isSuperAdmin }: Props) {
   const [tab, setTab] = useState<'classmates' | 'treks' | 'insights' | 'profiles'>('classmates')
   const [insightsTab, setInsightsTab] = useState<'destinations' | 'heatmap' | 'completeness'>('destinations')
   const [destinationsView, setDestinationsView] = useState<'table' | 'timeline'>('table')
@@ -681,7 +682,7 @@ export function AdminClient({ profiles, treks }: Props) {
       {/* Tabs + export */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 rounded-xl border border-border bg-card p-1">
-          {(['classmates', 'profiles', 'treks', 'insights'] as const).map(t => (
+          {(['classmates', ...(isSuperAdmin ? ['profiles'] : []), 'treks', 'insights'] as ('classmates' | 'profiles' | 'treks' | 'insights')[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -772,7 +773,7 @@ export function AdminClient({ profiles, treks }: Props) {
         </div>
       )}
 
-      {tab === 'profiles' && (
+      {tab === 'profiles' && isSuperAdmin && (
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="text-sm text-muted-foreground max-w-xl">

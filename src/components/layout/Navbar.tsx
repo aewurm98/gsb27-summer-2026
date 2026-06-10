@@ -72,7 +72,7 @@ export function Navbar({ profile }: { profile: Profile | null }) {
                   {label}
                 </Link>
               ))}
-              {profile?.is_admin && (
+              {(profile?.is_admin || profile?.is_co_admin) && (
                 <Link
                   href="/admin"
                   onClick={() => setMobileNavOpen(false)}
@@ -117,7 +117,7 @@ export function Navbar({ profile }: { profile: Profile | null }) {
               {label}
             </Link>
           ))}
-          {profile?.is_admin && (
+          {(profile?.is_admin || profile?.is_co_admin) && (
             <Link
               href="/admin"
               className={cn(
