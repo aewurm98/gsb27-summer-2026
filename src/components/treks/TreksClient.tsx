@@ -107,7 +107,10 @@ Once you click through, you can mark yourself as interested (or not) and see exa
 Looking forward to it,
 ${myName}`)
     // BCC keeps recipient addresses private from each other
-    return `mailto:?bcc=${bccs}&subject=${subject}&body=${body}`
+    const mailto = `mailto:?bcc=${bccs}&subject=${subject}&body=${body}`
+    // Gmail web compose URL (fallback for browser-only users)
+    const gmail = `https://mail.google.com/mail/?view=cm&to=${bccs}&su=${subject}&body=${body}`
+    return { mailto, gmail }
   }
 
   const [newTrek, setNewTrek] = useState({
@@ -651,12 +654,27 @@ ${myName}`)
                                 {noEmail.length} selected {noEmail.length === 1 ? 'classmate has' : 'classmates have'} no email on file and will be skipped.
                               </p>
                             )}
-                            <a
-                              href={buildMailtoLink(trek, inviteSelected, myName)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
-                            >
-                              <Mail size={11} /> Open in mail app ({withEmail.length} recipient{withEmail.length !== 1 ? 's' : ''})
-                            </a>
+                            {(() => {
+                              const { mailto, gmail } = buildMailtoLink(trek, inviteSelected, myName)
+                              return (
+                                <div className="flex flex-wrap gap-2">
+                                  <a
+                                    href={mailto}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
+                                  >
+                                    <Mail size={11} /> Open in mail app ({withEmail.length})
+                                  </a>
+                                  <a
+                                    href={gmail}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-accent transition"
+                                  >
+                                    <Mail size={11} /> Open in Gmail
+                                  </a>
+                                </div>
+                              )
+                            })()}
                           </div>
                         )
                       })()}
