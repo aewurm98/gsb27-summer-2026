@@ -87,7 +87,7 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, isCoAdm
 
   function buildMailtoLink(trek: FullTrek, selectedIds: Set<string>, myName: string) {
     const invitees = allProfiles.filter(p => selectedIds.has(p.id))
-    const emails = invitees.map(p => p.email).filter(Boolean).join(',')
+    const bccs = invitees.map(p => p.email).filter((e): e is string => !!e).join(',')
     const othersCount = invitees.length - 1
     const mysteryLine = othersCount > 0
       ? `${othersCount} other GSB classmate${othersCount === 1 ? '' : 's'} ${othersCount === 1 ? 'is' : 'are'} already curious about this trip.`
@@ -106,7 +106,8 @@ Once you click through, you can mark yourself as interested (or not) and see exa
 
 Looking forward to it,
 ${myName}`)
-    return `mailto:${emails}?subject=${subject}&body=${body}`
+    // BCC keeps recipient addresses private from each other
+    return `mailto:?bcc=${bccs}&subject=${subject}&body=${body}`
   }
 
   const [newTrek, setNewTrek] = useState({

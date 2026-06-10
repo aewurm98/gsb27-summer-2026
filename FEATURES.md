@@ -175,4 +175,5 @@ To/Subject/Body linking to `/treks`. Fully free — no backend email service.
 | 5 — Nomad support | ✅ Done | middleware.ts, getLocationAtWeek specificity fix, map visitor markers |
 | 5b — Self-serve treks | ✅ Done | Any classmate can lead a suggested trek; group lead shown on cards |
 | 6a — Co-admin roles | ✅ Done | is_co_admin flag; full admin read access + trek management, no profile editing |
-| 6b — Trek invite emails | ✅ Done | Mailto-based invite panel with pre-selection, FOMO mystery count, email preview |
+| 6b — Trek invite emails | ✅ Done | Mailto-based invite panel (BCC, pre-selection, FOMO mystery count, email preview) |
+| 7 — Resend email + notifications | 📋 Planned | See TREK_EMAIL_PLAN.md — Resend API invites + subscription notifications |
