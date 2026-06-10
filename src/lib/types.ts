@@ -86,6 +86,23 @@ export interface TrekInterest {
   profile?: Pick<Profile, 'id' | 'full_name' | 'photo_url'>
 }
 
+export interface TrekComment {
+  id: string
+  trek_id: string
+  profile_id: string
+  content: string
+  created_at: string
+  profile?: Pick<Profile, 'full_name' | 'photo_url'>
+}
+
+export interface TrekDateVote {
+  id: string
+  trek_id: string
+  profile_id: string
+  vote: 1 | -1
+  created_at: string
+}
+
 export interface MapboxFeature {
   id: string
   place_name: string

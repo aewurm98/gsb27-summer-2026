@@ -188,7 +188,7 @@ function AddClassmateForm({ onSuccess, onCancel }: { onSuccess: () => void; onCa
           </div>
         ))}
 
-        {stops.length < 3 && (
+        {stops.length < 4 && (
           <button
             onClick={() => setStops(prev => [...prev, emptyStop()])}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition"

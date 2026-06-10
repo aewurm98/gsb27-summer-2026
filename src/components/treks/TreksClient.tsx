@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
-import { Trek, TrekInterest, Profile } from '@/lib/types'
+import { Trek, TrekInterest, Profile, TrekComment, TrekDateVote } from '@/lib/types'
 import { formatDateRange, avatarColor, getInitials } from '@/lib/utils'
-import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search, ArrowRight, Mail } from 'lucide-react'
+import { MapPin, Calendar, Users, Plus, Check, X, Loader2, Plane, Sparkles, DollarSign, UserPlus, Search, ArrowRight, Mail, ThumbsUp, ThumbsDown, MessageCircle, Share2, Trash2 } from 'lucide-react'
 import { CityAutocomplete } from '@/components/profile/CityAutocomplete'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -44,6 +44,8 @@ function CostIcon({ tier }: { tier: string | null }) {
 
 type FullTrek = Trek & {
   trek_interests: (TrekInterest & { profile: Pick<Profile, 'id' | 'full_name' | 'photo_url'> | undefined })[]
+  trek_comments?: (Omit<TrekComment, 'profile'> & { profile?: { full_name: string; photo_url: string | null } | null })[]
+  trek_date_votes?: Pick<TrekDateVote, 'id' | 'profile_id' | 'vote'>[]
 }
 
 interface Props {
@@ -71,6 +73,12 @@ export function TreksClient({ treks: initialTreks, myProfileId, isAdmin, isCoAdm
   const [inviteTrekId, setInviteTrekId] = useState<string | null>(null)
   const [inviteSelected, setInviteSelected] = useState<Set<string>>(new Set())
   const [inviteSearch, setInviteSearch] = useState('')
+  // Comments state
+  const [commentsOpen, setCommentsOpen] = useState<Set<string>>(new Set())
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [submittingComment, setSubmittingComment] = useState<string | null>(null)
+  // Share feedback
+  const [copiedTrekId, setCopiedTrekId] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
@@ -193,6 +201,45 @@ ${myName}`)
     } finally {
       setCreating(false)
     }
+  }
+
+  async function handleDateVote(trekId: string, vote: 1 | -1) {
+    if (!myProfileId) return
+    const trek = treks.find(t => t.id === trekId)
+    const existing = trek?.trek_date_votes?.find(v => v.profile_id === myProfileId)
+    if (existing) {
+      if (existing.vote === vote) {
+        await supabase.from('trek_date_votes').delete().eq('id', existing.id)
+      } else {
+        await supabase.from('trek_date_votes').update({ vote }).eq('id', existing.id)
+      }
+    } else {
+      await supabase.from('trek_date_votes').insert({ trek_id: trekId, profile_id: myProfileId, vote })
+    }
+    router.refresh()
+  }
+
+  async function handleAddComment(trekId: string) {
+    const content = commentDrafts[trekId]?.trim()
+    if (!content || !myProfileId || submittingComment) return
+    setSubmittingComment(trekId)
+    await supabase.from('trek_comments').insert({ trek_id: trekId, profile_id: myProfileId, content })
+    setCommentDrafts(prev => ({ ...prev, [trekId]: '' }))
+    setSubmittingComment(null)
+    router.refresh()
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    await supabase.from('trek_comments').delete().eq('id', commentId)
+    router.refresh()
+  }
+
+  function handleShare(trekId: string) {
+    const url = `${window.location.origin}/t/${trekId}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedTrekId(trekId)
+      setTimeout(() => setCopiedTrekId(null), 2000)
+    })
   }
 
   async function handleAddMember(trekId: string, profileId: string) {
@@ -441,12 +488,35 @@ ${myName}`)
                         {trek.destination_city}
                         {trek.destination_country !== 'United States' ? `, ${trek.destination_country}` : ''}
                       </span>
-                      {(trek.proposed_start || trek.proposed_end) && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Calendar size={10} />
-                          {formatDateRange(trek.proposed_start, trek.proposed_end)}
-                        </span>
-                      )}
+                      {(trek.proposed_start || trek.proposed_end) && (() => {
+                        const upVotes = (trek.trek_date_votes ?? []).filter(v => v.vote === 1).length
+                        const downVotes = (trek.trek_date_votes ?? []).filter(v => v.vote === -1).length
+                        const myVote = myProfileId ? (trek.trek_date_votes ?? []).find(v => v.profile_id === myProfileId)?.vote : undefined
+                        return (
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={10} className="text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">{formatDateRange(trek.proposed_start, trek.proposed_end)}</span>
+                            {myProfileId && (
+                              <>
+                                <button
+                                  onClick={() => handleDateVote(trek.id, 1)}
+                                  title="These dates work for me"
+                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-medium transition ${myVote === 1 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10'}`}
+                                >
+                                  <ThumbsUp size={10} /> {upVotes > 0 && upVotes}
+                                </button>
+                                <button
+                                  onClick={() => handleDateVote(trek.id, -1)}
+                                  title="These dates don't work for me"
+                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-medium transition ${myVote === -1 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' : 'text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10'}`}
+                                >
+                                  <ThumbsDown size={10} /> {downVotes > 0 && downVotes}
+                                </button>
+                              </>
+                            )}
+                          </span>
+                        )
+                      })()}
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Users size={10} />
                         {interested.length} interested{confirmed.length > 0 ? `, ${confirmed.length} confirmed` : ''}
@@ -484,6 +554,11 @@ ${myName}`)
                     {myProfileId && (
                       <button
                         onClick={() => handleInterest(trek.id, 'interested')}
+                        title={
+                          myInterest?.status === 'confirmed' ? 'You\'re confirmed for this trek · click to withdraw'
+                          : myInterest?.status === 'interested' ? 'You\'re interested · click to remove'
+                          : 'Mark yourself as interested in this trek'
+                        }
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
                           myInterest?.status === 'interested' || myInterest?.status === 'confirmed'
                             ? 'bg-primary text-primary-foreground border-primary'
@@ -513,6 +588,14 @@ ${myName}`)
                         <UserPlus size={12} />
                       </button>
                     )}
+                    {/* Share link */}
+                    <button
+                      onClick={() => handleShare(trek.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border border-border hover:bg-accent transition"
+                      title="Copy sharable link"
+                    >
+                      {copiedTrekId === trek.id ? <Check size={12} className="text-emerald-500" /> : <Share2 size={12} />}
+                    </button>
                   </div>
                 </div>
 
@@ -681,6 +764,75 @@ ${myName}`)
 
                       {inviteSelected.size === 0 && (
                         <p className="text-[11px] text-muted-foreground">Select at least one classmate to draft the invite.</p>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Comments thread */}
+                {(() => {
+                  const comments = (trek.trek_comments ?? []).slice().sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                  const isOpen = commentsOpen.has(trek.id)
+                  return (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <button
+                        onClick={() => setCommentsOpen(prev => {
+                          const next = new Set(prev)
+                          next.has(trek.id) ? next.delete(trek.id) : next.add(trek.id)
+                          return next
+                        })}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition"
+                      >
+                        <MessageCircle size={12} />
+                        {comments.length > 0 ? `${comments.length} comment${comments.length !== 1 ? 's' : ''}` : 'Add a comment'}
+                        {isOpen ? ' ▲' : ' ▼'}
+                      </button>
+
+                      {isOpen && (
+                        <div className="mt-3 space-y-3">
+                          {comments.map(comment => (
+                            <div key={comment.id} className="flex gap-2.5">
+                              <div className={`relative w-6 h-6 rounded-full overflow-hidden flex items-center justify-center text-white text-[10px] font-bold shrink-0 ${avatarColor(comment.profile?.full_name ?? '')}`}>
+                                {comment.profile?.photo_url
+                                  ? <Image src={comment.profile.photo_url} alt={comment.profile.full_name ?? ''} fill className="object-cover" unoptimized />
+                                  : getInitials(comment.profile?.full_name ?? '?')
+                                }
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="text-xs font-semibold">{comment.profile?.full_name ?? 'Unknown'}</span>
+                                  <span className="text-[10px] text-muted-foreground">{new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  {comment.profile_id === myProfileId && (
+                                    <button onClick={() => handleDeleteComment(comment.id)} className="text-muted-foreground/50 hover:text-destructive transition ml-auto">
+                                      <Trash2 size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="text-xs text-foreground/80 mt-0.5 leading-snug">{comment.content}</p>
+                              </div>
+                            </div>
+                          ))}
+
+                          {myProfileId && (
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                value={commentDrafts[trek.id] ?? ''}
+                                onChange={e => setCommentDrafts(prev => ({ ...prev, [trek.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(trek.id) } }}
+                                placeholder="Add a comment…"
+                                maxLength={1000}
+                                className="flex-1 px-3 py-1.5 rounded-lg border border-input bg-background text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                              />
+                              <button
+                                onClick={() => handleAddComment(trek.id)}
+                                disabled={!commentDrafts[trek.id]?.trim() || submittingComment === trek.id}
+                                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 disabled:opacity-40 transition"
+                              >
+                                {submittingComment === trek.id ? <Loader2 size={11} className="animate-spin" /> : 'Post'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )

@@ -15,7 +15,7 @@ export default async function TreksPage() {
 
   const { data: treks } = await supabase
     .from('treks')
-    .select('*, trek_interests(*, profile:profiles(id, full_name, photo_url))')
+    .select('*, trek_interests(*, profile:profiles(id, full_name, photo_url)), trek_comments(*, profile:profiles(full_name, photo_url)), trek_date_votes(id, profile_id, vote)')
     .order('created_at', { ascending: false })
 
   const { data: myProfile } = await supabase
